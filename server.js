@@ -255,8 +255,8 @@ app.get('/api/listings/search', async (req, res) => {
             status: { in: ['CONFIRMED', 'PENDING'] },
             OR: [
               { 
-                startDate: { lte: new Date(checkOut) },
-                endDate: { gte: new Date(checkIn) }
+                checkIn: { lte: new Date(checkOut) },
+                checkOut: { gte: new Date(checkIn) }
               }
             ]
           }
@@ -594,12 +594,12 @@ app.delete('/api/listings/:id/images/:imageId', authMiddleware, async (req, res)
 // Create booking with overlap check
 app.post('/api/bookings', authMiddleware, async (req, res) => {
   try {
-    const { listingId, startDate, endDate, guests } = req.body;
-    if (!listingId || !startDate || !endDate) {
+    const { listingId, checkIn, checkOut, guests } = req.body;
+    if (!listingId || !checkIn || !checkOut) {
       return res.status(400).json({ error: 'Missing fields' });
     }
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
     if (start >= end) return res.status(400).json({ error: 'Invalid date range' });
 
     // Block past-date bookings
@@ -630,8 +630,8 @@ app.post('/api/bookings', authMiddleware, async (req, res) => {
         listingId: Number(listingId),
         status: { not: 'CANCELLED' }, // Don't count cancelled bookings
         AND: [
-          { startDate: { lte: end } },
-          { endDate: { gte: start } },
+          { checkIn: { lte: end } },
+          { checkOut: { gte: start } },
         ],
       },
     });
@@ -651,8 +651,8 @@ app.post('/api/bookings', authMiddleware, async (req, res) => {
       data: {
         listingId: Number(listingId),
         userId: req.user.id,
-        startDate: start,
-        endDate: end,
+        checkIn: start,
+        checkOut: end,
         totalPrice,
         guests: guestCount,
         status: 'PENDING',
@@ -688,7 +688,7 @@ app.get('/api/bookings/my-bookings', authMiddleware, async (req, res) => {
           }
         }
       },
-      orderBy: { startDate: 'desc' }
+      orderBy: { checkIn: 'desc' }
     });
 
     res.json(bookings);
@@ -720,7 +720,7 @@ app.get('/api/bookings/hosting', authMiddleware, async (req, res) => {
           select: { id: true, name: true, email: true, avatar: true }
         }
       },
-      orderBy: { startDate: 'desc' }
+      orderBy: { checkIn: 'desc' }
     });
 
     res.json(bookings);
@@ -1194,10 +1194,10 @@ app.get('*', (req, res) => {
 // Create Stripe Checkout Session
 app.post('/api/payments/create-checkout-session', authMiddleware, async (req, res) => {
   try {
-    const { listingId, startDate, endDate, guests } = req.body;
+    const { listingId, checkIn, checkOut, guests } = req.body;
 
     // Validate input
-    if (!listingId || !startDate || !endDate || !guests) {
+    if (!listingId || !checkIn || !checkOut || !guests) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -1212,8 +1212,8 @@ app.post('/api/payments/create-checkout-session', authMiddleware, async (req, re
     }
 
     // Calculate total price
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
     const nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
     
     // Calculate guest pricing
@@ -1229,9 +1229,9 @@ app.post('/api/payments/create-checkout-session', authMiddleware, async (req, re
         listingId: parseInt(listingId),
         status: { not: 'CANCELLED' },
         OR: [
-          { AND: [{ startDate: { lte: start } }, { endDate: { gt: start } }] },
-          { AND: [{ startDate: { lt: end } }, { endDate: { gte: end } }] },
-          { AND: [{ startDate: { gte: start } }, { endDate: { lte: end } }] }
+          { AND: [{ checkIn: { lte: start } }, { checkOut: { gt: start } }] },
+          { AND: [{ checkIn: { lt: end } }, { checkOut: { gte: end } }] },
+          { AND: [{ checkIn: { gte: start } }, { checkOut: { lte: end } }] }
         ]
       }
     });
@@ -1261,8 +1261,8 @@ app.post('/api/payments/create-checkout-session', authMiddleware, async (req, re
       metadata: {
         userId: req.user.id.toString(),
         listingId: listingId.toString(),
-        startDate: start.toISOString(),
-        endDate: end.toISOString(),
+        checkIn: start.toISOString(),
+        checkOut: end.toISOString(),
         guests: guests.toString(),
         totalPrice: totalPrice.toString()
       },
@@ -1299,15 +1299,15 @@ app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
     }
 
     // Extract metadata
-    const { userId, listingId, startDate, endDate, guests, totalPrice } = session.metadata;
+    const { userId, listingId, checkIn, checkOut, guests, totalPrice } = session.metadata;
 
     // Create booking
     const booking = await prisma.booking.create({
       data: {
         userId: parseInt(userId),
         listingId: parseInt(listingId),
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        checkIn: new Date(checkIn),
+        checkOut: new Date(checkOut),
         guests: parseInt(guests),
         totalPrice: parseInt(totalPrice),
         status: 'CONFIRMED',
@@ -1361,7 +1361,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
     case 'checkout.session.completed':
       const session = event.data.object;
       // Create booking from webhook (if not already created by verify endpoint)
-      const { userId, listingId, startDate, endDate, guests, totalPrice } = session.metadata;
+      const { userId, listingId, checkIn, checkOut, guests, totalPrice } = session.metadata;
       
       const existingBooking = await prisma.booking.findFirst({
         where: { stripeSessionId: session.id }
@@ -1372,8 +1372,8 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
           data: {
             userId: parseInt(userId),
             listingId: parseInt(listingId),
-            startDate: new Date(startDate),
-            endDate: new Date(endDate),
+            checkIn: new Date(checkIn),
+            checkOut: new Date(checkOut),
             guests: parseInt(guests),
             totalPrice: parseInt(totalPrice),
             status: 'CONFIRMED',

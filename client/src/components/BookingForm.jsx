@@ -70,8 +70,8 @@ export default function BookingForm({ listing, onClose }) {
         },
         body: JSON.stringify({
           listingId: listing.id,
-          startDate: checkIn.toISOString(),
-          endDate: checkOut.toISOString(),
+          checkIn: checkIn.toISOString(),
+          checkOut: checkOut.toISOString(),
           guests
         })
       });

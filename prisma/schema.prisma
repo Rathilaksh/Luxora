@@ -89,37 +89,68 @@ model Booking {
   listingId         Int
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId            Int
-  startDate         DateTime
-  endDate           DateTime
+  checkIn           DateTime // Renamed from startDate for consistency
+  checkOut          DateTime // Renamed from endDate for consistency
   totalPrice        Int
   guests            Int      @default(1)
   status            String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
   paymentStatus     String   @default("UNPAID") // UNPAID, PAID, REFUNDED
   stripeSessionId   String?  // Stripe Checkout Session ID
   stripePaymentId   String?  // Stripe Payment Intent ID
+  review            Review?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   
   @@index([listingId])
   @@index([userId])
-  @@index([startDate, endDate])
+  @@index([checkIn, checkOut])
   @@index([stripeSessionId])
 }
 
 model Review {
-  id         Int      @id @default(autoincrement())
-  rating     Int      // 1-5 stars
-  comment    String?
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  listingId  Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     Int
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id              Int           @id @default(autoincrement())
+  // Overall and category ratings (1-5 scale)
+  overallRating   Int           // Overall rating
+  cleanlinessRating Int?        // Cleanliness rating
+  accuracyRating  Int?          // Accuracy rating
+  checkInRating   Int?          // Check-in experience
+  communicationRating Int?      // Host communication
+  locationRating  Int?          // Location rating
+  valueRating     Int?          // Value for money
   
-  @@unique([listingId, userId]) // One review per user per listing
+  comment         String?       // Guest review text
+  hostResponse    String?       // Host's response to review
+  hostRespondedAt DateTime?     // When host responded
+  
+  photos          ReviewPhoto[] // Guest photos
+  
+  isVerifiedStay  Boolean       @default(true) // Badge for verified bookings
+  isPublic        Boolean       @default(true) // Can be hidden by admin
+  
+  booking         Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId       Int           @unique
+  listing         Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId       Int
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          Int
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
   @@index([listingId])
   @@index([userId])
+  @@index([overallRating])
+}
+
+model ReviewPhoto {
+  id        Int      @id @default(autoincrement())
+  url       String
+  caption   String?
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId  Int
+  createdAt DateTime @default(now())
+  
+  @@index([reviewId])
 }
 
 model Amenity {
