@@ -9,6 +9,20 @@ const Stripe = require('stripe');
 const emailService = require('./services/emailService');
 const app = express();
 app.use(express.json());
+// Basic health check
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+// Database health check
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const count = await prisma.listing.count();
+    res.json({ status: 'ok', listings: count });
+  } catch (err) {
+    console.error('DB health error:', err);
+    res.status(500).json({ status: 'error', message: 'Database unreachable' });
+  }
+});
 
 // Prisma client
 const { PrismaClient } = require('@prisma/client');
@@ -242,7 +256,7 @@ app.get('/api/listings/search', async (req, res) => {
       include: {
         host: { select: { id: true, name: true, email: true, avatar: true, isVerified: true, isSuperhost: true } },
         reviews: {
-          select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { name: true, avatar: true } } }
+          select: { id: true, overallRating: true, comment: true, createdAt: true, user: { select: { name: true, avatar: true } } }
         },
         amenities: {
           include: { amenity: true }
@@ -285,7 +299,7 @@ app.get('/api/listings/search', async (req, res) => {
     // Calculate ratings and distance
     listings = listings.map(listing => {
       const averageRating = listing.reviews.length > 0
-        ? listing.reviews.reduce((sum, r) => sum + r.rating, 0) / listing.reviews.length
+        ? listing.reviews.reduce((sum, r) => sum + r.overallRating, 0) / listing.reviews.length
         : null;
       
       let distance = null;
@@ -336,6 +350,7 @@ app.get('/api/listings/search', async (req, res) => {
 // GET all listings (with host info, reviews, amenities, images) - Legacy endpoint
 app.get('/api/listings', async (req, res) => {
   try {
+    const startTime = Date.now();
     const { priceMin, priceMax, city, roomType } = req.query;
     const where = {};
     if (city) where.city = { contains: city };
@@ -350,7 +365,7 @@ app.get('/api/listings', async (req, res) => {
       include: { 
         host: { select: { id: true, name: true, email: true, avatar: true, isVerified: true, isSuperhost: true } },
         reviews: {
-          select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { name: true, avatar: true } } }
+          select: { id: true, overallRating: true, comment: true, createdAt: true, user: { select: { name: true, avatar: true } } }
         },
         amenities: {
           include: { amenity: true }
@@ -366,12 +381,14 @@ app.get('/api/listings', async (req, res) => {
     const listingsWithRating = listings.map(listing => ({
       ...listing,
       averageRating: listing.reviews.length > 0 
-        ? listing.reviews.reduce((sum, r) => sum + r.rating, 0) / listing.reviews.length 
+        ? listing.reviews.reduce((sum, r) => sum + r.overallRating, 0) / listing.reviews.length 
         : null,
       reviewCount: listing.reviews.length
     }));
     
     res.json(listingsWithRating);
+    const duration = Date.now() - startTime;
+    console.log(`GET /api/listings -> ${listings.length} results in ${duration}ms`);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch listings' });
@@ -403,7 +420,7 @@ app.get('/api/listings/:id', async (req, res) => {
     
     // Calculate average rating
     const averageRating = listing.reviews.length > 0 
-      ? listing.reviews.reduce((sum, r) => sum + r.rating, 0) / listing.reviews.length 
+      ? listing.reviews.reduce((sum, r) => sum + r.overallRating, 0) / listing.reviews.length 
       : null;
     
     res.json({ ...listing, averageRating, reviewCount: listing.reviews.length });
@@ -1050,7 +1067,7 @@ app.get('/api/wishlists', authMiddleware, async (req, res) => {
         listing: {
           include: {
             host: { select: { id: true, name: true } },
-            reviews: { select: { rating: true } }
+            reviews: { select: { overallRating: true } }
           }
         }
       },
@@ -1063,7 +1080,7 @@ app.get('/api/wishlists', authMiddleware, async (req, res) => {
       listing: {
         ...w.listing,
         averageRating: w.listing.reviews.length > 0
-          ? w.listing.reviews.reduce((sum, r) => sum + r.rating, 0) / w.listing.reviews.length
+          ? w.listing.reviews.reduce((sum, r) => sum + r.overallRating, 0) / w.listing.reviews.length
           : null,
         reviewCount: w.listing.reviews.length
       }
