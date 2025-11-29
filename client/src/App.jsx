@@ -799,6 +799,59 @@ export default function App() {
             </div>
 
             <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'1rem 0'}} />
+            <div className="active-filters">
+              <h3 style={{marginTop:0, fontSize:'.9rem'}}>Active Filters</h3>
+              {filters.location && (
+                <div className="filter-tag">
+                  <span>📍 {filters.location}</span>
+                  <button onClick={() => handleFilterChange({ location: '' })}>×</button>
+                </div>
+              )}
+              {filters.checkIn && filters.checkOut && (
+                <div className="filter-tag">
+                  <span>📅 {new Date(filters.checkIn).toLocaleDateString()} - {new Date(filters.checkOut).toLocaleDateString()}</span>
+                  <button onClick={() => handleFilterChange({ checkIn: null, checkOut: null })}>×</button>
+                </div>
+              )}
+              {filters.guests && (
+                <div className="filter-tag">
+                  <span>👥 {filters.guests} guest{filters.guests > 1 ? 's' : ''}</span>
+                  <button onClick={() => handleFilterChange({ guests: null })}>×</button>
+                </div>
+              )}
+              {filters.priceMin && (
+                <div className="filter-tag">
+                  <span>💰 From ${filters.priceMin}</span>
+                  <button onClick={() => handleFilterChange({ priceMin: '' })}>×</button>
+                </div>
+              )}
+              {filters.priceMax && (
+                <div className="filter-tag">
+                  <span>💰 Up to ${filters.priceMax}</span>
+                  <button onClick={() => handleFilterChange({ priceMax: '' })}>×</button>
+                </div>
+              )}
+              {filters.roomType && (
+                <div className="filter-tag">
+                  <span>🏠 {filters.roomType.replace('_', ' ')}</span>
+                  <button onClick={() => handleFilterChange({ roomType: '' })}>×</button>
+                </div>
+              )}
+              {(filters.amenities?.length > 0) && (
+                <div className="filter-tag">
+                  <span>✨ {filters.amenities.length} amenity filter{filters.amenities.length > 1 ? 's' : ''}</span>
+                  <button onClick={() => handleFilterChange({ amenities: [] })}>×</button>
+                </div>
+              )}
+              {filters.sortBy && (
+                <div className="filter-tag">
+                  <span>⬆️ {filters.sortBy.replace('_', ' ')}</span>
+                  <button onClick={() => handleFilterChange({ sortBy: '' })}>×</button>
+                </div>
+              )}
+            </div>
+            
+            <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'1rem 0'}} />
             <h3 style={{marginTop:0}}>Create Listing</h3>
             {user ? (
               <form onSubmit={handleCreateListing} style={{display:'flex',flexDirection:'column',gap:'.65rem'}}>
