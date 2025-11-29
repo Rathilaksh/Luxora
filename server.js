@@ -159,7 +159,168 @@ app.post('/api/me/avatar', authMiddleware, upload.single('avatar'), async (req, 
 
 // ========== LISTING ENDPOINTS ==========
 
-// GET all listings (with host info, reviews, amenities, images)
+// Helper function to calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// ADVANCED SEARCH endpoint with comprehensive filtering
+app.get('/api/listings/search', async (req, res) => {
+  try {
+    const {
+      location, // city or country search
+      checkIn, // ISO date string
+      checkOut, // ISO date string
+      guests,
+      bedrooms,
+      bathrooms,
+      priceMin,
+      priceMax,
+      roomType,
+      amenities, // comma-separated amenity IDs
+      sortBy, // price_asc, price_desc, rating, distance
+      latitude, // for distance sorting
+      longitude,
+      radius, // search radius in km
+    } = req.query;
+
+    const where = {};
+    
+    // Location filter (city or country) - SQLite doesn't support mode: 'insensitive'
+    if (location) {
+      where.OR = [
+        { city: { contains: location } },
+        { country: { contains: location } },
+        { address: { contains: location } }
+      ];
+    }
+
+    // Price range filter
+    if (priceMin || priceMax) {
+      where.price = {};
+      if (priceMin) where.price.gte = Number(priceMin);
+      if (priceMax) where.price.lte = Number(priceMax);
+    }
+
+    // Room type filter
+    if (roomType) where.roomType = roomType;
+
+    // Capacity filters
+    if (guests) where.maxGuests = { gte: Number(guests) };
+    if (bedrooms) where.bedrooms = { gte: Number(bedrooms) };
+    if (bathrooms) where.bathrooms = { gte: Number(bathrooms) };
+
+    // Radius-based location filter
+    if (latitude && longitude && radius) {
+      where.latitude = { not: null };
+      where.longitude = { not: null };
+    }
+
+    // Fetch listings with includes
+    let listings = await prisma.listing.findMany({
+      where,
+      include: {
+        host: { select: { id: true, name: true, email: true, avatar: true, isVerified: true, isSuperhost: true } },
+        reviews: {
+          select: { id: true, rating: true, comment: true, createdAt: true, user: { select: { name: true, avatar: true } } }
+        },
+        amenities: {
+          include: { amenity: true }
+        },
+        images: {
+          orderBy: { displayOrder: 'asc' }
+        },
+        bookings: checkIn && checkOut ? {
+          where: {
+            status: { in: ['CONFIRMED', 'PENDING'] },
+            OR: [
+              { 
+                startDate: { lte: new Date(checkOut) },
+                endDate: { gte: new Date(checkIn) }
+              }
+            ]
+          }
+        } : false
+      },
+    });
+
+    // Filter out booked listings if dates provided
+    if (checkIn && checkOut) {
+      listings = listings.filter(listing => listing.bookings.length === 0);
+      // Remove bookings from response
+      listings = listings.map(({ bookings, ...rest }) => rest);
+    }
+
+    // Filter by amenities if provided
+    if (amenities) {
+      const amenityIds = amenities.split(',').map(id => Number(id.trim())).filter(id => !isNaN(id));
+      if (amenityIds.length > 0) {
+        listings = listings.filter(listing => {
+          const listingAmenityIds = listing.amenities.map(a => a.amenity.id);
+          return amenityIds.every(id => listingAmenityIds.includes(id));
+        });
+      }
+    }
+
+    // Calculate ratings and distance
+    listings = listings.map(listing => {
+      const averageRating = listing.reviews.length > 0
+        ? listing.reviews.reduce((sum, r) => sum + r.rating, 0) / listing.reviews.length
+        : null;
+      
+      let distance = null;
+      if (latitude && longitude && listing.latitude && listing.longitude) {
+        distance = calculateDistance(
+          Number(latitude), 
+          Number(longitude), 
+          listing.latitude, 
+          listing.longitude
+        );
+      }
+
+      return {
+        ...listing,
+        averageRating,
+        reviewCount: listing.reviews.length,
+        distance
+      };
+    });
+
+    // Filter by radius after distance calculation
+    if (latitude && longitude && radius) {
+      const maxRadius = Number(radius);
+      listings = listings.filter(listing => listing.distance !== null && listing.distance <= maxRadius);
+    }
+
+    // Sort results
+    if (sortBy === 'price_asc') {
+      listings.sort((a, b) => a.price - b.price);
+    } else if (sortBy === 'price_desc') {
+      listings.sort((a, b) => b.price - a.price);
+    } else if (sortBy === 'rating') {
+      listings.sort((a, b) => (b.averageRating || 0) - (a.averageRating || 0));
+    } else if (sortBy === 'distance' && latitude && longitude) {
+      listings.sort((a, b) => (a.distance || Infinity) - (b.distance || Infinity));
+    } else {
+      // Default: sort by newest
+      listings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    }
+
+    res.json(listings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// GET all listings (with host info, reviews, amenities, images) - Legacy endpoint
 app.get('/api/listings', async (req, res) => {
   try {
     const { priceMin, priceMax, city, roomType } = req.query;

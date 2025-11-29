@@ -2,6 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react';
 import './styles.css';
 import ImageGallery from './components/ImageGallery';
 import UserProfile from './components/UserProfile';
+import SearchBar from './components/SearchBar';
+import FilterPanel from './components/FilterPanel';
+import MapView from './components/MapView';
+import { Grid, Map as MapIcon } from 'lucide-react';
 
 const API = '';// same origin
 
@@ -36,20 +40,49 @@ function useListings(filters, reloadKey) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [amenities, setAmenities] = useState([]);
+  
+  useEffect(() => {
+    // Fetch amenities once
+    fetch('/api/amenities')
+      .then(r => r.ok ? r.json() : [])
+      .then(list => setAmenities(Array.isArray(list) ? list : []))
+      .catch(() => setAmenities([]));
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams();
+    
+    // Use search endpoint if we have advanced filters, otherwise legacy endpoint
+    const useSearchEndpoint = filters.location || filters.checkIn || filters.checkOut || 
+                              filters.guests || filters.bedrooms || filters.bathrooms || 
+                              filters.amenities?.length > 0 || filters.sortBy;
+    
+    if (filters.location) params.set('location', filters.location);
+    if (filters.checkIn) params.set('checkIn', filters.checkIn);
+    if (filters.checkOut) params.set('checkOut', filters.checkOut);
+    if (filters.guests) params.set('guests', filters.guests);
     if (filters.city) params.set('city', filters.city);
     if (filters.roomType) params.set('roomType', filters.roomType);
     if (filters.priceMin) params.set('priceMin', filters.priceMin);
     if (filters.priceMax) params.set('priceMax', filters.priceMax);
+    if (filters.bedrooms) params.set('bedrooms', filters.bedrooms);
+    if (filters.bathrooms) params.set('bathrooms', filters.bathrooms);
+    if (filters.sortBy) params.set('sortBy', filters.sortBy);
+    if (filters.amenities && filters.amenities.length > 0) {
+      params.set('amenities', filters.amenities.join(','));
+    }
+    
     setLoading(true);
-    fetch('/api/listings' + (params.toString() ? ('?' + params.toString()) : ''))
-      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed'))) // network / status
+    const endpoint = useSearchEndpoint ? '/api/listings/search' : '/api/listings';
+    fetch(endpoint + (params.toString() ? ('?' + params.toString()) : ''))
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('Failed')))
       .then(list => { Array.isArray(list) ? setData(list) : setData([]); setError(null); })
       .catch(e => { setError(e); setData([]); })
       .finally(() => setLoading(false));
   }, [filters, reloadKey]);
-  return { listings: data, loading, error };
+  
+  return { listings: data, loading, error, amenities };
 }
 
 function Stars({ value, reviewCount }) {
@@ -491,17 +524,49 @@ function ListingModal({ listing, token, onClose }) {
 }
 
 export default function App() {
-  const [filters, setFilters] = useState({ city: '', roomType: '', priceMin: '', priceMax: '' });
+  // Search and filter state
+  const [filters, setFilters] = useState({ 
+    location: '',
+    checkIn: null,
+    checkOut: null,
+    guests: null,
+    city: '', 
+    roomType: '', 
+    priceMin: '', 
+    priceMax: '',
+    bedrooms: '',
+    bathrooms: '',
+    amenities: [],
+    sortBy: ''
+  });
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
   const perPage = 12;
   const [selected, setSelected] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const { listings, loading, error } = useListings(filters, reloadKey);
+  const { listings, loading, error, amenities } = useListings(filters, reloadKey);
   const { token, user, login, register, logout } = useAuth();
   const [view, setView] = useState('browse'); // browse | wishlist | messages | conversation | profile
   const [conversationWith, setConversationWith] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
+  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'map'
+
+  // Search handlers
+  const handleSearch = (searchFilters) => {
+    setFilters(prev => ({
+      ...prev,
+      location: searchFilters.location || '',
+      checkIn: searchFilters.checkIn || null,
+      checkOut: searchFilters.checkOut || null,
+      guests: searchFilters.guests || null,
+    }));
+    setPage(1);
+  };
+
+  const handleFilterChange = (newFilters) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+    setPage(1);
+  };
 
   // Wishlist state
   const [wishlistIds, setWishlistIds] = useState(new Set());
@@ -680,7 +745,7 @@ export default function App() {
       <header className="site-header">
         <div className="container inner">
           <h1 className="logo">Luxora</h1>
-          <input id="search" placeholder="Search city or listing" value={term} onChange={e => setTerm(e.target.value)} />
+          {view === 'browse' && <SearchBar onSearch={handleSearch} initialFilters={filters} />}
           {user && (
             <nav style={{ display:'flex', gap:'.5rem' }}>
               <button className="theme-toggle" onClick={()=> { setView('browse'); setSelected(null); }}>Browse</button>
@@ -719,15 +784,26 @@ export default function App() {
         {view === 'browse' && (
         <div className="layout">
           <aside className="panel">
-            <h3>Filters</h3>
-            <div className="filters">
-              <input placeholder="City" value={filters.city} onChange={e=> setFilters(f=> ({...f, city:e.target.value}))} />
-              <input placeholder="Room Type" value={filters.roomType} onChange={e=> setFilters(f=> ({...f, roomType:e.target.value}))} />
-              <input placeholder="Min Price" type="number" value={filters.priceMin} onChange={e=> setFilters(f=> ({...f, priceMin:e.target.value}))} />
-              <input placeholder="Max Price" type="number" value={filters.priceMax} onChange={e=> setFilters(f=> ({...f, priceMax:e.target.value}))} />
+            <div className="search-controls">
+              <FilterPanel filters={filters} onFilterChange={handleFilterChange} amenities={amenities} />
+              <div className="view-toggle">
+                <button 
+                  className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
+                  onClick={() => setViewMode('grid')}
+                >
+                  <Grid size={16} />
+                  Grid
+                </button>
+                <button 
+                  className={`view-toggle-btn ${viewMode === 'map' ? 'active' : ''}`}
+                  onClick={() => setViewMode('map')}
+                >
+                  <MapIcon size={16} />
+                  Map
+                </button>
+              </div>
             </div>
-            <div style={{fontSize:'.7rem',color:'var(--muted)'}}>Tip: Use filters + search for precise results.</div>
-            
+
             <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'1rem 0'}} />
             <h3 style={{marginTop:0}}>Create Listing</h3>
             {user ? (
@@ -793,26 +869,38 @@ export default function App() {
           </aside>
           <section style={{ display:'flex', flexDirection:'column', gap:'1.2rem' }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <h2 style={{margin:0,fontSize:'1.15rem'}}>Explore listings</h2>
+              <h2 style={{margin:0,fontSize:'1.15rem'}}>
+                {viewMode === 'grid' ? 'Explore listings' : 'Map view'}
+              </h2>
               <div style={{fontSize:'.8rem',color:'var(--muted)'}}>{filtered.length} result{filtered.length===1?'':'s'}</div>
             </div>
             {loading ? (
-              <div className="grid">
-                {Array.from({length:8}).map((_,i)=> (
-                  <div key={i} className="card skeleton">
-                    <div className="card-img" />
-                    <div className="card-body">
-                      <div className="line" style={{width:'70%'}} />
-                      <div className="line" style={{width:'40%'}} />
+              viewMode === 'grid' ? (
+                <div className="grid">
+                  {Array.from({length:8}).map((_,i)=> (
+                    <div key={i} className="card skeleton">
+                      <div className="card-img" />
+                      <div className="card-body">
+                        <div className="line" style={{width:'70%'}} />
+                        <div className="line" style={{width:'40%'}} />
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{padding:'2rem',textAlign:'center',color:'var(--muted)'}}>Loading map...</div>
+              )
             ) : error ? (
               <div style={{padding:'1rem'}}>
-                <div className="alert" style={{marginBottom:'1rem'}}>Failed to load listings. Ensure the API server is running (PORT=3002 node server.js).</div>
+                <div className="alert" style={{marginBottom:'1rem'}}>Failed to load listings. Ensure the API server is running (PORT=3000 node server.js).</div>
                 <button className="theme-toggle" onClick={()=> setReloadKey(k=>k+1)}>Retry</button>
               </div>
+            ) : viewMode === 'map' ? (
+              <MapView 
+                listings={filtered} 
+                onListingClick={setSelected}
+                selectedListing={selected}
+              />
             ) : (
               <div className="grid">
                 {pageItems.map(item => (

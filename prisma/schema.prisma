@@ -41,6 +41,8 @@ model Listing {
   city        String
   country     String    @default("USA")
   address     String?
+  latitude    Float?    // For map integration
+  longitude   Float?    // For map integration
   price       Int
   image       String?   // Keep for backwards compatibility
   images      ListingImage[]
@@ -63,6 +65,9 @@ model Listing {
   @@index([city])
   @@index([price])
   @@index([hostId])
+  @@index([bedrooms])
+  @@index([maxGuests])
+  @@index([latitude, longitude])
 }
 
 model ListingImage {
