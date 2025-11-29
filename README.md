@@ -8,17 +8,25 @@ A full-stack Airbnb-style vacation rental platform with advanced search, filteri
 - ✅ **User Authentication**: JWT-based secure login and registration
 - ✅ **Listing Management**: Create, view, edit, and delete vacation rentals
 - ✅ **Booking System**: Reserve listings with date validation
+- ✅ **Payment Processing**: Stripe Checkout integration with secure payments
 - ✅ **Reviews & Ratings**: Rate and review stays
 - ✅ **Wishlist**: Save favorite listings
 - ✅ **Messaging**: Direct communication between hosts and guests
 - ✅ **User Profiles**: Customizable profiles with avatars and verification badges
 
-### Advanced Search & Filtering (NEW!)
+### Advanced Search & Filtering
 - 🔍 **Smart Search Bar**: Location, dates, and guest count
 - 🎯 **Comprehensive Filters**: Price, room type, bedrooms, bathrooms, amenities
 - 🗺️ **Interactive Map View**: Mapbox integration with clickable markers
-- �� **Availability Search**: Filter by check-in/check-out dates
+- 📅 **Availability Search**: Filter by check-in/check-out dates
 - 📊 **Multiple Sorting**: By price, rating, distance, or newest
+
+### Payment Integration (NEW!)
+- 💳 **Stripe Checkout**: Secure payment processing
+- 💰 **Dynamic Pricing**: Base rate + extra guest fees
+- ✅ **Payment Verification**: Automatic booking creation after payment
+- 📧 **Booking Confirmation**: Success modal with booking details
+- 🔐 **Webhook Support**: Reliable booking creation via Stripe webhooks
 
 ### Image Management
 - 📸 Multi-image galleries with carousel
@@ -32,6 +40,10 @@ A full-stack Airbnb-style vacation rental platform with advanced search, filteri
 # Install dependencies
 npm install
 cd client && npm install && cd ..
+
+# Configure environment (required for payments)
+cp .env.example .env
+# Edit .env and add your Stripe API keys
 
 # Set up database
 npx prisma migrate dev
@@ -48,8 +60,8 @@ node server.js
 
 ## 📦 Tech Stack
 
-**Backend**: Node.js, Express, Prisma, SQLite, JWT, Multer, Sharp  
-**Frontend**: React 18, Vite, Mapbox GL, react-datepicker, lucide-react
+**Backend**: Node.js, Express, Prisma, SQLite, JWT, Multer, Sharp, Stripe  
+**Frontend**: React 18, Vite, Mapbox GL, react-datepicker, @stripe/stripe-js, lucide-react
 
 ## 🔍 Search Features
 
@@ -113,24 +125,39 @@ npx prisma migrate dev --name migration_name
 ## 🌐 API Endpoints
 
 ### Search & Listings
-- \`GET /api/listings/search\` - Advanced search
-- \`GET /api/listings\` - All listings
-- \`POST /api/listings\` - Create (auth)
-- \`PUT /api/listings/:id\` - Update (auth)
-- \`DELETE /api/listings/:id\` - Delete (auth)
+- `GET /api/listings/search` - Advanced search
+- `GET /api/listings` - All listings
+- `POST /api/listings` - Create (auth)
+- `PUT /api/listings/:id` - Update (auth)
+- `DELETE /api/listings/:id` - Delete (auth)
 
 ### Images
-- \`POST /api/listings/:id/images\` - Upload
-- \`PUT /api/listings/:id/images/reorder\` - Reorder
-- \`DELETE /api/listings/:id/images/:imageId\` - Delete
+- `POST /api/listings/:id/images` - Upload
+- `PUT /api/listings/:id/images/reorder` - Reorder
+- `DELETE /api/listings/:id/images/:imageId` - Delete
 
 ### Auth
-- \`POST /api/register\` - Sign up
-- \`POST /api/login\` - Sign in
-- \`GET /api/me\` - Profile
+- `POST /api/register` - Sign up
+- `POST /api/login` - Sign in
+- `GET /api/me` - Profile
+
+### Payments
+- `POST /api/payments/create-checkout-session` - Create Stripe Checkout (auth)
+- `GET /api/payments/verify/:sessionId` - Verify payment & create booking (auth)
+- `POST /api/payments/webhook` - Stripe webhook handler
 
 ### Bookings, Reviews, Wishlist, Messages
 See full API documentation in the codebase.
+
+## 💳 Payment Setup
+
+1. Get Stripe API keys from https://stripe.com
+2. Copy `.env.example` to `.env`
+3. Add your Stripe keys to `.env`
+4. Update Stripe publishable key in `client/src/components/BookingForm.jsx`
+5. Test with card: `4242 4242 4242 4242`
+
+See [PAYMENT_IMPLEMENTATION.md](PAYMENT_IMPLEMENTATION.md) for complete setup guide.
 
 ## 🚀 Deployment
 
