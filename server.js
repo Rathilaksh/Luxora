@@ -6,6 +6,7 @@ const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const Stripe = require('stripe');
+const emailService = require('./services/emailService');
 const app = express();
 app.use(express.json());
 
@@ -91,6 +92,12 @@ app.post('/api/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
     const user = await prisma.user.create({ data: { name, email, passwordHash } });
     const token = createToken(user);
+    
+    // Send welcome email (non-blocking)
+    emailService.sendWelcomeEmail(user).catch(err => 
+      console.error('Failed to send welcome email:', err)
+    );
+    
     res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email } });
   } catch (err) {
     console.error(err);
@@ -1167,10 +1174,22 @@ app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
         stripePaymentId: session.payment_intent
       },
       include: {
-        listing: true,
+        listing: {
+          include: {
+            host: true
+          }
+        },
         user: true
       }
     });
+
+    // Send confirmation emails (non-blocking)
+    emailService.sendBookingConfirmation(booking).catch(err =>
+      console.error('Failed to send booking confirmation email:', err)
+    );
+    emailService.sendHostBookingNotification(booking).catch(err =>
+      console.error('Failed to send host notification email:', err)
+    );
 
     res.json({ booking });
   } catch (err) {
@@ -1207,7 +1226,7 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
       });
 
       if (!existingBooking && session.payment_status === 'paid') {
-        await prisma.booking.create({
+        const booking = await prisma.booking.create({
           data: {
             userId: parseInt(userId),
             listingId: parseInt(listingId),
@@ -1219,8 +1238,24 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
             paymentStatus: 'PAID',
             stripeSessionId: session.id,
             stripePaymentId: session.payment_intent
+          },
+          include: {
+            listing: {
+              include: {
+                host: true
+              }
+            },
+            user: true
           }
         });
+        
+        // Send confirmation emails (non-blocking)
+        emailService.sendBookingConfirmation(booking).catch(err =>
+          console.error('Failed to send booking confirmation email:', err)
+        );
+        emailService.sendHostBookingNotification(booking).catch(err =>
+          console.error('Failed to send host notification email:', err)
+        );
       }
       break;
     case 'payment_intent.payment_failed':
