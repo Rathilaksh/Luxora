@@ -70,11 +70,11 @@ export default function PaymentSuccess({ sessionId, onClose }) {
             <h3>{booking.listing.title}</h3>
             <div className="detail-row">
               <span>Check-in:</span>
-              <strong>{new Date(booking.startDate).toLocaleDateString()}</strong>
+              <strong>{new Date(booking.checkIn).toLocaleDateString()}</strong>
             </div>
             <div className="detail-row">
               <span>Check-out:</span>
-              <strong>{new Date(booking.endDate).toLocaleDateString()}</strong>
+              <strong>{new Date(booking.checkOut).toLocaleDateString()}</strong>
             </div>
             <div className="detail-row">
               <span>Guests:</span>

@@ -5,7 +5,8 @@ import AvailabilityCalendar from './AvailabilityCalendar';
 import { format } from 'date-fns';
 
 // Initialize Stripe (use your publishable key)
-const stripePromise = loadStripe('pk_test_YOUR_PUBLISHABLE_KEY_HERE');
+// For testing, Stripe test mode works without real key if backend has test key
+const stripePromise = loadStripe('pk_test_51placeholder_use_real_key_in_production');
 
 export default function BookingForm({ listing, onClose }) {
   const [dateRange, setDateRange] = useState(null);

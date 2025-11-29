@@ -72,10 +72,10 @@ export default function BookingDashboard({ token, onClose }) {
   const now = new Date();
   
   const upcoming = displayBookings.filter(b => 
-    new Date(b.startDate) > now && b.status !== 'CANCELLED'
+    new Date(b.checkIn) > now && b.status !== 'CANCELLED'
   );
   const past = displayBookings.filter(b => 
-    new Date(b.endDate) <= now || b.status === 'CANCELLED'
+    new Date(b.checkOut) <= now || b.status === 'CANCELLED'
   );
 
   return (
@@ -168,8 +168,8 @@ export default function BookingDashboard({ token, onClose }) {
 
 function BookingCard({ booking, isHost, isPast, onCancel }) {
   const image = booking.listing.images?.[0]?.url || booking.listing.image;
-  const startDate = new Date(booking.startDate);
-  const endDate = new Date(booking.endDate);
+  const startDate = new Date(booking.checkIn);
+  const endDate = new Date(booking.checkOut);
   const nights = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
   
   const formatDate = (date) => {

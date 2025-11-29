@@ -8,36 +8,12 @@ import MapView from './components/MapView';
 import BookingForm from './components/BookingForm';
 import PaymentSuccess from './components/PaymentSuccess';
 import BookingDashboard from './components/BookingDashboard';
+import Login from './components/Login';
+import Register from './components/Register';
+import { useAuth } from './context/AuthContext';
 import { Grid, Map as MapIcon } from 'lucide-react';
 
 const API = '';// same origin
-
-function useAuth() {
-  const [token, setToken] = useState(() => localStorage.getItem('luxora_token') || '');
-  const [user, setUser] = useState(null);
-
-  useEffect(() => {
-    if (!token) { setUser(null); return; }
-    fetch('/api/me', { headers: { Authorization: 'Bearer ' + token } })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(u => setUser(u))
-      .catch(() => setUser(null));
-  }, [token]);
-
-  function login(email, password) {
-    return fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
-      .then(r => r.json())
-      .then(data => { if (data.token) { localStorage.setItem('luxora_token', data.token); setToken(data.token); } return data; });
-  }
-  function register(name, email, password) {
-    return fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) })
-      .then(r => r.json())
-      .then(data => { if (data.token) { localStorage.setItem('luxora_token', data.token); setToken(data.token); } return data; });
-  }
-  function logout() { localStorage.removeItem('luxora_token'); setToken(''); }
-
-  return { token, user, login, register, logout };
-}
 
 function useListings(filters, reloadKey) {
   const [data, setData] = useState([]);
@@ -538,6 +514,8 @@ function ListingModal({ listing, token, handleBookNow, onClose }) {
 }
 
 export default function App() {
+  const { user, token, logout } = useAuth();
+  
   // Search and filter state
   const [filters, setFilters] = useState({ 
     location: '',
@@ -559,7 +537,6 @@ export default function App() {
   const [selected, setSelected] = useState(null);
   const [reloadKey, setReloadKey] = useState(0);
   const { listings, loading, error, amenities } = useListings(filters, reloadKey);
-  const { token, user, login, register, logout } = useAuth();
   const [view, setView] = useState('browse'); // browse | wishlist | messages | conversation | profile | bookings
   const [conversationWith, setConversationWith] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
@@ -571,6 +548,10 @@ export default function App() {
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentSessionId, setPaymentSessionId] = useState(null);
   const [showBookingDashboard, setShowBookingDashboard] = useState(false);
+  
+  // Auth modal state
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
 
   // Check for payment success on load
   useEffect(() => {
@@ -588,7 +569,8 @@ export default function App() {
 
   const handleBookNow = (listing) => {
     if (!token) {
-      alert('Please login to book a listing');
+      setAuthMode('login');
+      setShowAuthModal(true);
       return;
     }
     setBookingListing(listing);
@@ -711,35 +693,6 @@ export default function App() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const pageItems = filtered.slice((page - 1) * perPage, page * perPage);
 
-  // auth form state
-  const [authMode, setAuthMode] = useState('login');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authName, setAuthName] = useState('');
-  const [authMsg, setAuthMsg] = useState(null);
-
-  function submitAuth(e) {
-    e.preventDefault();
-    setAuthMsg(null);
-    const action = authMode === 'login' ? login(authEmail, authPassword) : register(authName, authEmail, authPassword);
-    action.then(res => { 
-      if (res.error) {
-        setAuthMsg(res.error); 
-      } else {
-        setAuthMsg(authMode === 'login' ? 'Welcome back!' : 'Account created successfully!');
-        // Clear form
-        setAuthEmail('');
-        setAuthPassword('');
-        setAuthName('');
-        // Clear message after 3 seconds
-        setTimeout(() => setAuthMsg(null), 3000);
-      }
-    })
-      .catch(() => setAuthMsg('Connection error. Please try again.'));
-  }
-
-  // Dark theme toggle removed
-
   function handleCreateListing(e) {
     e.preventDefault();
     if (!token) { setCreateMsg({ type: 'error', msg: 'Please login first' }); return; }
@@ -813,15 +766,11 @@ export default function App() {
                 <button onClick={logout}>Logout</button>
               </>
             ) : (
-              <form onSubmit={submitAuth} style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
-                {authMode === 'register' && <input required placeholder="Name" value={authName} onChange={e=>setAuthName(e.target.value)} />}
-                <input required placeholder="Email" type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} />
-                <input required placeholder="Password" type="password" value={authPassword} onChange={e=>setAuthPassword(e.target.value)} />
-                <button type="submit">{authMode === 'login' ? 'Login' : 'Sign Up'}</button>
-                <button type="button" onClick={()=> {setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthMsg(null);}}>{authMode === 'login' ? 'New?' : 'Have acct?'}</button>
-              </form>
+              <>
+                <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }}>Login</button>
+                <button className="theme-toggle" onClick={() => { setAuthMode('register'); setShowAuthModal(true); }}>Sign Up</button>
+              </>
             )}
-            {authMsg && <div style={{position:'absolute',top:'70px',right:'20px',zIndex:1000}} className={authMsg.includes('Welcome')||authMsg.includes('created')?'alert success':'alert'}>{authMsg}</div>}
           </div>
         </div>
       </header>
@@ -1076,6 +1025,26 @@ export default function App() {
           token={token}
           onClose={() => setShowBookingDashboard(false)}
         />
+      )}
+      
+      {/* Auth Modal */}
+      {showAuthModal && (
+        <div className="modal" onClick={() => setShowAuthModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '450px', padding: 0 }}>
+            <button className="close" onClick={() => setShowAuthModal(false)}>✕</button>
+            {authMode === 'login' ? (
+              <Login 
+                onSwitch={() => setAuthMode('register')}
+                onSuccess={() => setShowAuthModal(false)}
+              />
+            ) : (
+              <Register 
+                onSwitch={() => setAuthMode('login')}
+                onSuccess={() => setShowAuthModal(false)}
+              />
+            )}
+          </div>
+        </div>
       )}
     </>
   );
