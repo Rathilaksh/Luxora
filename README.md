@@ -21,12 +21,19 @@ A full-stack Airbnb-style vacation rental platform with advanced search, filteri
 - 📅 **Availability Search**: Filter by check-in/check-out dates
 - 📊 **Multiple Sorting**: By price, rating, distance, or newest
 
-### Payment Integration (NEW!)
+### Payment Integration
 - 💳 **Stripe Checkout**: Secure payment processing
 - 💰 **Dynamic Pricing**: Base rate + extra guest fees
 - ✅ **Payment Verification**: Automatic booking creation after payment
 - 📧 **Booking Confirmation**: Success modal with booking details
 - 🔐 **Webhook Support**: Reliable booking creation via Stripe webhooks
+
+### Email Notifications (NEW!)
+- 📧 **Welcome Emails**: Sent on user registration
+- 🎉 **Booking Confirmations**: Detailed confirmation to guests
+- 🏠 **Host Notifications**: Alerts hosts of new bookings
+- 🎨 **Professional Templates**: Responsive HTML with branding
+- 🔧 **Easy Configuration**: Support for Gmail, SendGrid, Ethereal, Mailtrap
 
 ### Image Management
 - 📸 Multi-image galleries with carousel
@@ -60,7 +67,7 @@ node server.js
 
 ## 📦 Tech Stack
 
-**Backend**: Node.js, Express, Prisma, SQLite, JWT, Multer, Sharp, Stripe  
+**Backend**: Node.js, Express, Prisma, SQLite, JWT, Multer, Sharp, Stripe, Nodemailer  
 **Frontend**: React 18, Vite, Mapbox GL, react-datepicker, @stripe/stripe-js, lucide-react
 
 ## 🔍 Search Features
@@ -158,6 +165,24 @@ See full API documentation in the codebase.
 5. Test with card: `4242 4242 4242 4242`
 
 See [PAYMENT_IMPLEMENTATION.md](PAYMENT_IMPLEMENTATION.md) for complete setup guide.
+
+## 📧 Email Setup
+
+Configure email notifications for booking confirmations and welcome messages:
+
+1. Choose an email provider (Gmail, SendGrid, Ethereal, Mailtrap)
+2. Add credentials to `.env`:
+   ```env
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_USER=your-email@gmail.com
+   EMAIL_PASS=your-app-password
+   EMAIL_FROM=noreply@luxora.com
+   ```
+3. For Gmail: Enable 2FA and generate App Password
+4. Restart server
+
+See [EMAIL_IMPLEMENTATION.md](EMAIL_IMPLEMENTATION.md) for complete setup guide.
 
 ## 🚀 Deployment
 
