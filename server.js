@@ -670,6 +670,116 @@ app.post('/api/bookings', authMiddleware, async (req, res) => {
   }
 });
 
+// Get user's bookings (as a guest)
+app.get('/api/bookings/my-bookings', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: { userId: req.user.id },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            country: true,
+            image: true,
+            images: { take: 1, orderBy: { displayOrder: 'asc' } },
+            host: { select: { id: true, name: true, email: true, avatar: true } }
+          }
+        }
+      },
+      orderBy: { startDate: 'desc' }
+    });
+
+    res.json(bookings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get bookings for listings the user hosts
+app.get('/api/bookings/hosting', authMiddleware, async (req, res) => {
+  try {
+    const bookings = await prisma.booking.findMany({
+      where: {
+        listing: { hostId: req.user.id }
+      },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            country: true,
+            image: true,
+            images: { take: 1, orderBy: { displayOrder: 'asc' } }
+          }
+        },
+        user: {
+          select: { id: true, name: true, email: true, avatar: true }
+        }
+      },
+      orderBy: { startDate: 'desc' }
+    });
+
+    res.json(bookings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Cancel a booking
+app.patch('/api/bookings/:id/cancel', authMiddleware, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { listing: { select: { hostId: true } } }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Only the guest or host can cancel
+    if (booking.userId !== req.user.id && booking.listing.hostId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to cancel this booking' });
+    }
+
+    // Check if booking is already cancelled or completed
+    if (booking.status === 'CANCELLED') {
+      return res.status(400).json({ error: 'Booking already cancelled' });
+    }
+    if (booking.status === 'COMPLETED') {
+      return res.status(400).json({ error: 'Cannot cancel completed booking' });
+    }
+
+    // Update booking status
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status: 'CANCELLED' },
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            image: true
+          }
+        }
+      }
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET bookings (filter by userId or listingId)
 app.get('/api/bookings', async (req, res) => {
   try {

@@ -7,6 +7,7 @@ import FilterPanel from './components/FilterPanel';
 import MapView from './components/MapView';
 import BookingForm from './components/BookingForm';
 import PaymentSuccess from './components/PaymentSuccess';
+import BookingDashboard from './components/BookingDashboard';
 import { Grid, Map as MapIcon } from 'lucide-react';
 
 const API = '';// same origin
@@ -559,7 +560,7 @@ export default function App() {
   const [reloadKey, setReloadKey] = useState(0);
   const { listings, loading, error, amenities } = useListings(filters, reloadKey);
   const { token, user, login, register, logout } = useAuth();
-  const [view, setView] = useState('browse'); // browse | wishlist | messages | conversation | profile
+  const [view, setView] = useState('browse'); // browse | wishlist | messages | conversation | profile | bookings
   const [conversationWith, setConversationWith] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'map'
@@ -569,6 +570,7 @@ export default function App() {
   const [bookingListing, setBookingListing] = useState(null);
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentSessionId, setPaymentSessionId] = useState(null);
+  const [showBookingDashboard, setShowBookingDashboard] = useState(false);
 
   // Check for payment success on load
   useEffect(() => {
@@ -792,6 +794,7 @@ export default function App() {
             <nav style={{ display:'flex', gap:'.5rem' }}>
               <button className="theme-toggle" onClick={()=> { setView('browse'); setSelected(null); }}>Browse</button>
               <button className="theme-toggle" onClick={()=> setView('wishlist')}>Wishlist ({wishlistIds.size})</button>
+              <button className="theme-toggle" onClick={()=> setShowBookingDashboard(true)}>My Bookings</button>
               <button className="theme-toggle" onClick={()=> { setView('messages'); setConversationWith(null); }}>Messages</button>
               {conversationWith && view==='conversation' && (
                 <button className="theme-toggle" onClick={()=> setView('messages')}>Back</button>
@@ -1064,6 +1067,14 @@ export default function App() {
             setPaymentSessionId(null);
             setReloadKey(k => k + 1); // Refresh data
           }}
+        />
+      )}
+
+      {/* Booking Dashboard */}
+      {showBookingDashboard && (
+        <BookingDashboard
+          token={token}
+          onClose={() => setShowBookingDashboard(false)}
         />
       )}
     </>
