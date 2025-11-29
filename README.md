@@ -28,12 +28,20 @@ A full-stack Airbnb-style vacation rental platform with advanced search, filteri
 - 📧 **Booking Confirmation**: Success modal with booking details
 - 🔐 **Webhook Support**: Reliable booking creation via Stripe webhooks
 
-### Email Notifications (NEW!)
+### Email Notifications
 - 📧 **Welcome Emails**: Sent on user registration
 - 🎉 **Booking Confirmations**: Detailed confirmation to guests
 - 🏠 **Host Notifications**: Alerts hosts of new bookings
 - 🎨 **Professional Templates**: Responsive HTML with branding
 - 🔧 **Easy Configuration**: Support for Gmail, SendGrid, Ethereal, Mailtrap
+
+### Booking Management (NEW!)
+- 📅 **Booking Dashboard**: Comprehensive view of all bookings
+- 🎫 **My Trips**: Track bookings as a guest
+- 🏡 **Hosting**: Manage bookings for your listings
+- ⏰ **Upcoming/Past**: Organized by timeline
+- ❌ **Cancellation**: Cancel bookings with authorization checks
+- 🔍 **Detailed Cards**: View all booking information at a glance
 
 ### Image Management
 - 📸 Multi-image galleries with carousel
@@ -153,7 +161,12 @@ npx prisma migrate dev --name migration_name
 - `GET /api/payments/verify/:sessionId` - Verify payment & create booking (auth)
 - `POST /api/payments/webhook` - Stripe webhook handler
 
-### Bookings, Reviews, Wishlist, Messages
+### Bookings
+- `GET /api/bookings/my-bookings` - Get user's bookings as guest (auth)
+- `GET /api/bookings/hosting` - Get bookings for user's listings (auth)
+- `PATCH /api/bookings/:id/cancel` - Cancel a booking (auth)
+
+### Reviews, Wishlist, Messages
 See full API documentation in the codebase.
 
 ## 💳 Payment Setup
