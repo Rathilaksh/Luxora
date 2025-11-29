@@ -1,0 +1,36 @@
+{
+  "name": "luxora-starter",
+  "version": "0.1.0",
+  "description": "Minimal Luxora starter: static frontend + small Express API",
+  "main": "server.js",
+  "scripts": {
+    "start": "PORT=3002 node server.js",
+    "dev": "nodemon server.js",
+    "prisma:migrate": "npx prisma migrate dev --name init",
+    "prisma:seed": "node prisma/seed.js",
+    "db:init": "npm run prisma:migrate && npm run prisma:seed",
+    "dev:client": "npm --prefix client run dev",
+    "build:client": "npm --prefix client run build",
+    "dev:full": "concurrently -k \"PORT=3002 node server.js\" \"npm run dev:client\""
+  },
+  "keywords": [
+    "airbnb",
+    "clone",
+    "starter"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^5.0.0",
+    "bcryptjs": "^2.4.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "nodemon": "^2.0.22",
+    "prisma": "^5.0.0"
+  }
+}

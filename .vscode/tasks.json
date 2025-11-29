@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build client after date blocking",
+			"type": "shell",
+			"command": "cd client && npm run build"
+		}
+	]
+}

@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// Note: SQLite may not support Prisma enums in some CLI versions; use a string field for roomType
+
+model User {
+  id           Int        @id @default(autoincrement())
+  name         String
+  email        String     @unique
+  passwordHash String?
+  avatar       String?
+  bio          String?
+  phone        String?
+  isVerified   Boolean    @default(false)
+  isSuperhost  Boolean    @default(false)
+  responseRate Int?       // Percentage 0-100
+  responseTime String?    // e.g. "within an hour"
+  joinedDate   DateTime   @default(now())
+  listings     Listing[]  @relation("HostListings")
+  bookings     Booking[]
+  reviews      Review[]
+  wishlists    Wishlist[]
+  sentMessages Message[]  @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  
+  @@index([email])
+}
+
+model Listing {
+  id          Int       @id @default(autoincrement())
+  title       String
+  description String?
+  city        String
+  country     String    @default("USA")
+  address     String?
+  price       Int
+  image       String?   // Keep for backwards compatibility
+  images      ListingImage[]
+  roomType    String    @default("ENTIRE_PLACE")
+  bedrooms    Int       @default(1)
+  bathrooms   Int       @default(1)
+  maxGuests   Int       @default(2)
+  baseGuests  Int       @default(2)  // Number of guests included in base price
+  extraGuestFee Int     @default(0)  // Additional fee per guest beyond baseGuests
+  host        User      @relation("HostListings", fields: [hostId], references: [id], onDelete: Cascade)
+  hostId      Int
+  bookings    Booking[]
+  reviews     Review[]
+  amenities   ListingAmenity[]
+  wishlists   Wishlist[]
+  messages    Message[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([city])
+  @@index([price])
+  @@index([hostId])
+}
+
+model ListingImage {
+  id          Int      @id @default(autoincrement())
+  url         String
+  caption     String?
+  displayOrder Int     @default(0)
+  listingId   Int
+  listing     Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  
+  @@index([listingId])
+  @@index([displayOrder])
+}
+
+model Booking {
+  id         Int      @id @default(autoincrement())
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId  Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int
+  startDate  DateTime
+  endDate    DateTime
+  totalPrice Int
+  guests     Int      @default(1)
+  status     String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@index([listingId])
+  @@index([userId])
+  @@index([startDate, endDate])
+}
+
+model Review {
+  id         Int      @id @default(autoincrement())
+  rating     Int      // 1-5 stars
+  comment    String?
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId  Int
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  @@unique([listingId, userId]) // One review per user per listing
+  @@index([listingId])
+  @@index([userId])
+}
+
+model Amenity {
+  id       Int              @id @default(autoincrement())
+  name     String           @unique
+  icon     String?          // Icon name or emoji
+  category String           @default("General") // General, Kitchen, Bathroom, Safety, etc.
+  listings ListingAmenity[]
+}
+
+model ListingAmenity {
+  listing   Listing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId Int
+  amenity   Amenity @relation(fields: [amenityId], references: [id], onDelete: Cascade)
+  amenityId Int
+  
+  @@id([listingId, amenityId])
+  @@index([listingId])
+  @@index([amenityId])
+}
+
+model Wishlist {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId Int
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, listingId]) // User can only favorite a listing once
+  @@index([userId])
+  @@index([listingId])
+}
+
+model Message {
+  id         Int      @id @default(autoincrement())
+  content    String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId   Int
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiverId Int
+  listing    Listing? @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  listingId  Int?
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([listingId])
+}
