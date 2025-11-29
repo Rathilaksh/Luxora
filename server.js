@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const multer = require('multer');
 const sharp = require('sharp');
 const fs = require('fs').promises;
+const Stripe = require('stripe');
 const app = express();
 app.use(express.json());
 
@@ -14,6 +15,11 @@ const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const PORT = process.env.PORT || 3000;
+const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_KEY_HERE';
+const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
+const CLIENT_URL = process.env.CLIENT_URL || `http://localhost:${PORT}`;
+
+const stripe = new Stripe(STRIPE_SECRET_KEY);
 
 function createToken(user) {
   return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
@@ -1032,6 +1038,200 @@ app.get('*', (req, res) => {
   } else {
     res.status(404).send('Run "npm run build:client" to build the frontend first.');
   }
+});
+
+// ========== PAYMENT ENDPOINTS ==========
+
+// Create Stripe Checkout Session
+app.post('/api/payments/create-checkout-session', authMiddleware, async (req, res) => {
+  try {
+    const { listingId, startDate, endDate, guests } = req.body;
+
+    // Validate input
+    if (!listingId || !startDate || !endDate || !guests) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Get listing details
+    const listing = await prisma.listing.findUnique({
+      where: { id: parseInt(listingId) },
+      include: { host: true }
+    });
+
+    if (!listing) {
+      return res.status(404).json({ error: 'Listing not found' });
+    }
+
+    // Calculate total price
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const nights = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+    
+    // Calculate guest pricing
+    let totalPrice = nights * listing.price;
+    if (guests > listing.baseGuests) {
+      const extraGuests = guests - listing.baseGuests;
+      totalPrice += nights * extraGuests * listing.extraGuestFee;
+    }
+
+    // Check availability (no overlapping bookings)
+    const conflictingBooking = await prisma.booking.findFirst({
+      where: {
+        listingId: parseInt(listingId),
+        status: { not: 'CANCELLED' },
+        OR: [
+          { AND: [{ startDate: { lte: start } }, { endDate: { gt: start } }] },
+          { AND: [{ startDate: { lt: end } }, { endDate: { gte: end } }] },
+          { AND: [{ startDate: { gte: start } }, { endDate: { lte: end } }] }
+        ]
+      }
+    });
+
+    if (conflictingBooking) {
+      return res.status(409).json({ error: 'Listing not available for selected dates' });
+    }
+
+    // Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: listing.title,
+              description: `${nights} nights • ${guests} guests`,
+              images: listing.image ? [`${CLIENT_URL}${listing.image}`] : []
+            },
+            unit_amount: totalPrice * 100, // Stripe expects cents
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        userId: req.user.id.toString(),
+        listingId: listingId.toString(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        guests: guests.toString(),
+        totalPrice: totalPrice.toString()
+      },
+      success_url: `${CLIENT_URL}/?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${CLIENT_URL}/?payment=cancelled`,
+    });
+
+    res.json({ sessionId: session.id, url: session.url });
+  } catch (err) {
+    console.error('Stripe error:', err);
+    res.status(500).json({ error: 'Failed to create checkout session' });
+  }
+});
+
+// Verify payment and create booking
+app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    // Retrieve the session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Payment not completed' });
+    }
+
+    // Check if booking already exists for this session
+    const existingBooking = await prisma.booking.findFirst({
+      where: { stripeSessionId: sessionId }
+    });
+
+    if (existingBooking) {
+      return res.json({ booking: existingBooking });
+    }
+
+    // Extract metadata
+    const { userId, listingId, startDate, endDate, guests, totalPrice } = session.metadata;
+
+    // Create booking
+    const booking = await prisma.booking.create({
+      data: {
+        userId: parseInt(userId),
+        listingId: parseInt(listingId),
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        guests: parseInt(guests),
+        totalPrice: parseInt(totalPrice),
+        status: 'CONFIRMED',
+        paymentStatus: 'PAID',
+        stripeSessionId: sessionId,
+        stripePaymentId: session.payment_intent
+      },
+      include: {
+        listing: true,
+        user: true
+      }
+    });
+
+    res.json({ booking });
+  } catch (err) {
+    console.error('Verify payment error:', err);
+    res.status(500).json({ error: 'Failed to verify payment' });
+  }
+});
+
+// Webhook endpoint for Stripe events (optional but recommended for production)
+app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+
+  if (!STRIPE_WEBHOOK_SECRET) {
+    return res.status(400).send('Webhook secret not configured');
+  }
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, STRIPE_WEBHOOK_SECRET);
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Handle the event
+  switch (event.type) {
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      // Create booking from webhook (if not already created by verify endpoint)
+      const { userId, listingId, startDate, endDate, guests, totalPrice } = session.metadata;
+      
+      const existingBooking = await prisma.booking.findFirst({
+        where: { stripeSessionId: session.id }
+      });
+
+      if (!existingBooking && session.payment_status === 'paid') {
+        await prisma.booking.create({
+          data: {
+            userId: parseInt(userId),
+            listingId: parseInt(listingId),
+            startDate: new Date(startDate),
+            endDate: new Date(endDate),
+            guests: parseInt(guests),
+            totalPrice: parseInt(totalPrice),
+            status: 'CONFIRMED',
+            paymentStatus: 'PAID',
+            stripeSessionId: session.id,
+            stripePaymentId: session.payment_intent
+          }
+        });
+      }
+      break;
+    case 'payment_intent.payment_failed':
+      // Handle failed payment
+      console.log('Payment failed:', event.data.object);
+      break;
+    default:
+      console.log(`Unhandled event type ${event.type}`);
+  }
+
+  res.json({ received: true });
 });
 
 app.listen(PORT, () => {

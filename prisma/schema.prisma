@@ -84,22 +84,26 @@ model ListingImage {
 }
 
 model Booking {
-  id         Int      @id @default(autoincrement())
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  listingId  Int
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId     Int
-  startDate  DateTime
-  endDate    DateTime
-  totalPrice Int
-  guests     Int      @default(1)
-  status     String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id                Int      @id @default(autoincrement())
+  listing           Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId         Int
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId            Int
+  startDate         DateTime
+  endDate           DateTime
+  totalPrice        Int
+  guests            Int      @default(1)
+  status            String   @default("PENDING") // PENDING, CONFIRMED, CANCELLED, COMPLETED
+  paymentStatus     String   @default("UNPAID") // UNPAID, PAID, REFUNDED
+  stripeSessionId   String?  // Stripe Checkout Session ID
+  stripePaymentId   String?  // Stripe Payment Intent ID
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
   
   @@index([listingId])
   @@index([userId])
   @@index([startDate, endDate])
+  @@index([stripeSessionId])
 }
 
 model Review {

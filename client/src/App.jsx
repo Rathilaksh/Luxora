@@ -5,6 +5,8 @@ import UserProfile from './components/UserProfile';
 import SearchBar from './components/SearchBar';
 import FilterPanel from './components/FilterPanel';
 import MapView from './components/MapView';
+import BookingForm from './components/BookingForm';
+import PaymentSuccess from './components/PaymentSuccess';
 import { Grid, Map as MapIcon } from 'lucide-react';
 
 const API = '';// same origin
@@ -347,7 +349,7 @@ function MiniCalendar({ unavailable, onPick }){
   );
 }
 
-function ListingModal({ listing, token, onClose }) {
+function ListingModal({ listing, token, handleBookNow, onClose }) {
   const [details, setDetails] = useState(listing);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState(null);
@@ -456,7 +458,18 @@ function ListingModal({ listing, token, onClose }) {
           {loading && <div className="alert" style={{ marginBottom: '0.5rem' }}>Loading details…</div>}
           {err && <div className="alert" style={{ marginBottom: '0.5rem' }}>{String(err)}</div>}
 
-          <BookingBox listing={d} token={token} onClose={onClose} />
+          <div style={{ margin:'1rem 0' }}>
+            <button 
+              className="btn-primary"
+              style={{ width:'100%', padding:'0.75rem', fontSize:'1rem', background:'var(--accent)', color:'white', border:'none', borderRadius:'var(--radius-sm)', cursor:'pointer' }}
+              onClick={() => {
+                handleBookNow(d);
+                onClose();
+              }}
+            >
+              Book Now - ${d.price}/night
+            </button>
+          </div>
 
           <hr style={{ border:'none', borderTop:'1px solid var(--border)', margin:'1rem 0' }} />
           <div>
@@ -550,6 +563,35 @@ export default function App() {
   const [conversationWith, setConversationWith] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
   const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'map'
+  
+  // Booking and payment state
+  const [showBookingForm, setShowBookingForm] = useState(false);
+  const [bookingListing, setBookingListing] = useState(null);
+  const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
+  const [paymentSessionId, setPaymentSessionId] = useState(null);
+
+  // Check for payment success on load
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const paymentStatus = urlParams.get('payment');
+    const sessionId = urlParams.get('session_id');
+    
+    if (paymentStatus === 'success' && sessionId) {
+      setPaymentSessionId(sessionId);
+      setShowPaymentSuccess(true);
+      // Clean URL
+      window.history.replaceState({}, '', '/');
+    }
+  }, []);
+
+  const handleBookNow = (listing) => {
+    if (!token) {
+      alert('Please login to book a listing');
+      return;
+    }
+    setBookingListing(listing);
+    setShowBookingForm(true);
+  };
 
   // Search handlers
   const handleSearch = (searchFilters) => {
@@ -981,7 +1023,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <ListingModal listing={selected} token={token} onClose={()=> setSelected(null)} />
+      <ListingModal listing={selected} token={token} handleBookNow={handleBookNow} onClose={()=> setSelected(null)} />
       {showProfile && user && (
         <UserProfile 
           user={user} 
@@ -998,6 +1040,29 @@ export default function App() {
                 window.location.reload(); // Simple refresh to update user state
               })
               .catch(() => {});
+          }}
+        />
+      )}
+      
+      {/* Booking Form Modal */}
+      {showBookingForm && bookingListing && (
+        <BookingForm
+          listing={bookingListing}
+          onClose={() => {
+            setShowBookingForm(false);
+            setBookingListing(null);
+          }}
+        />
+      )}
+
+      {/* Payment Success Modal */}
+      {showPaymentSuccess && paymentSessionId && (
+        <PaymentSuccess
+          sessionId={paymentSessionId}
+          onClose={() => {
+            setShowPaymentSuccess(false);
+            setPaymentSessionId(null);
+            setReloadKey(k => k + 1); // Refresh data
           }}
         />
       )}
