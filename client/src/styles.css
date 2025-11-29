@@ -1371,3 +1371,260 @@ aside.panel .filters input:focus { outline:none; border-color: var(--accent); bo
   }
 }
 
+/* ========== AVAILABILITY CALENDAR ========== */
+
+.availability-calendar {
+  margin: 1rem 0;
+}
+
+.calendar-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: 1rem;
+}
+
+.calendar-loading p {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Override react-day-picker default styles */
+.rdp {
+  --rdp-accent-color: var(--accent);
+  --rdp-background-color: rgba(var(--accent-rgb), 0.1);
+  margin: 0;
+}
+
+.rdp-months {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+.rdp-month {
+  background: var(--bg-alt);
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.rdp-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding: 0 0.5rem;
+}
+
+.rdp-caption_label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.rdp-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.rdp-nav_button {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text);
+}
+
+.rdp-nav_button:hover {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+.rdp-nav_button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.rdp-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+.rdp-head_cell {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  text-align: center;
+  padding: 0.5rem;
+}
+
+.rdp-cell {
+  text-align: center;
+}
+
+.rdp-day {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text);
+  position: relative;
+}
+
+.rdp-day:hover:not(.rdp-day_disabled) {
+  background: var(--bg);
+  border-color: var(--accent);
+}
+
+/* Today */
+.rdp-day.today {
+  font-weight: 600;
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Selected days */
+.rdp-day.selected-day {
+  background: var(--accent) !important;
+  color: white !important;
+  font-weight: 600;
+  border-color: var(--accent);
+}
+
+.rdp-day_range_start,
+.rdp-day_range_end {
+  background: var(--accent) !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.rdp-day_range_middle {
+  background: rgba(var(--accent-rgb), 0.15) !important;
+  color: var(--accent) !important;
+  border-radius: 0;
+}
+
+/* Disabled/blocked days */
+.rdp-day.disabled-day {
+  background: repeating-linear-gradient(
+    45deg,
+    #f8f9fa,
+    #f8f9fa 2px,
+    #e9ecef 2px,
+    #e9ecef 4px
+  );
+  color: #adb5bd;
+  cursor: not-allowed;
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.rdp-day_disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+/* Calendar legend */
+.calendar-legend {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.legend-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+.legend-box.available {
+  background: white;
+}
+
+.legend-box.blocked {
+  background: repeating-linear-gradient(
+    45deg,
+    #f8f9fa,
+    #f8f9fa 2px,
+    #e9ecef 2px,
+    #e9ecef 4px
+  );
+}
+
+.legend-box.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Calendar section in booking form */
+.calendar-section {
+  width: 100%;
+}
+
+.selected-dates {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: var(--bg);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.selected-dates p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+
+.selected-dates strong {
+  color: var(--accent);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .rdp-months {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .rdp-month {
+    padding: 0.75rem;
+  }
+  
+  .rdp-day {
+    width: 36px;
+    height: 36px;
+    font-size: 0.85rem;
+  }
+  
+  .calendar-legend {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+}
+

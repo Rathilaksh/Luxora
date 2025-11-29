@@ -1,17 +1,20 @@
 import { useState } from 'react';
-import DatePicker from 'react-datepicker';
 import { loadStripe } from '@stripe/stripe-js';
 import { Calendar, Users, CreditCard, AlertCircle } from 'lucide-react';
+import AvailabilityCalendar from './AvailabilityCalendar';
+import { format } from 'date-fns';
 
 // Initialize Stripe (use your publishable key)
 const stripePromise = loadStripe('pk_test_YOUR_PUBLISHABLE_KEY_HERE');
 
 export default function BookingForm({ listing, onClose }) {
-  const [checkIn, setCheckIn] = useState(null);
-  const [checkOut, setCheckOut] = useState(null);
+  const [dateRange, setDateRange] = useState(null);
   const [guests, setGuests] = useState(listing.baseGuests || 1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const checkIn = dateRange?.from;
+  const checkOut = dateRange?.to;
 
   // Calculate nights and total price
   const calculatePrice = () => {
@@ -111,40 +114,22 @@ export default function BookingForm({ listing, onClose }) {
             </div>
           )}
 
-          <div className="booking-section">
+          <div className="booking-section calendar-section">
             <label className="booking-label">
               <Calendar size={18} />
-              Check-in
+              Select Dates
             </label>
-            <DatePicker
-              selected={checkIn}
-              onChange={setCheckIn}
-              selectsStart
-              startDate={checkIn}
-              endDate={checkOut}
-              minDate={new Date()}
-              dateFormat="MMM d, yyyy"
-              placeholderText="Select date"
-              className="booking-date-input"
+            <AvailabilityCalendar
+              listingId={listing.id}
+              onSelect={setDateRange}
+              selectedRange={dateRange}
             />
-          </div>
-
-          <div className="booking-section">
-            <label className="booking-label">
-              <Calendar size={18} />
-              Check-out
-            </label>
-            <DatePicker
-              selected={checkOut}
-              onChange={setCheckOut}
-              selectsEnd
-              startDate={checkIn}
-              endDate={checkOut}
-              minDate={checkIn || new Date()}
-              dateFormat="MMM d, yyyy"
-              placeholderText="Select date"
-              className="booking-date-input"
-            />
+            {checkIn && checkOut && (
+              <div className="selected-dates">
+                <p><strong>Check-in:</strong> {format(checkIn, 'MMM d, yyyy')}</p>
+                <p><strong>Check-out:</strong> {format(checkOut, 'MMM d, yyyy')}</p>
+              </div>
+            )}
           </div>
 
           <div className="booking-section">

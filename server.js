@@ -780,6 +780,38 @@ app.patch('/api/bookings/:id/cancel', authMiddleware, async (req, res) => {
   }
 });
 
+// Get availability (blocked dates) for a listing
+app.get('/api/listings/:id/availability', async (req, res) => {
+  try {
+    const listingId = parseInt(req.params.id);
+    
+    // Get all confirmed and pending bookings for this listing
+    const bookings = await prisma.booking.findMany({
+      where: {
+        listingId,
+        status: {
+          in: ['PENDING', 'CONFIRMED']
+        }
+      },
+      select: {
+        checkIn: true,
+        checkOut: true
+      }
+    });
+
+    // Return array of booked date ranges
+    const blockedDates = bookings.map(booking => ({
+      from: booking.checkIn,
+      to: booking.checkOut
+    }));
+
+    res.json({ blockedDates });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET bookings (filter by userId or listingId)
 app.get('/api/bookings', async (req, res) => {
   try {
