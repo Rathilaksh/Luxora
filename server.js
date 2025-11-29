@@ -834,8 +834,12 @@ app.get('/api/listings/:id/reviews', async (req, res) => {
   try {
     const listingId = Number(req.params.id);
     const reviews = await prisma.review.findMany({
-      where: { listingId },
-      include: { user: { select: { id: true, name: true, avatar: true } } },
+      where: { listingId, isPublic: true },
+      include: { 
+        user: { select: { id: true, name: true, avatar: true } },
+        photos: true,
+        booking: { select: { checkIn: true, checkOut: true } }
+      },
       orderBy: { createdAt: 'desc' },
     });
     res.json(reviews);
@@ -845,37 +849,105 @@ app.get('/api/listings/:id/reviews', async (req, res) => {
   }
 });
 
-// POST a review (must be authenticated, can only review once per listing)
-app.post('/api/listings/:id/reviews', authMiddleware, async (req, res) => {
+// POST a review (requires completed booking)
+app.post('/api/reviews', authMiddleware, upload.array('photos', 5), async (req, res) => {
   try {
-    const listingId = Number(req.params.id);
-    const { rating, comment } = req.body;
+    const { 
+      bookingId, 
+      overallRating, 
+      cleanlinessRating, 
+      accuracyRating, 
+      checkInRating,
+      communicationRating,
+      locationRating,
+      valueRating,
+      comment 
+    } = req.body;
     
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'Rating must be between 1 and 5' });
+    // Validate overall rating
+    if (!overallRating || overallRating < 1 || overallRating > 5) {
+      return res.status(400).json({ error: 'Overall rating must be between 1 and 5' });
     }
     
-    // Check if listing exists
-    const listing = await prisma.listing.findUnique({ where: { id: listingId } });
-    if (!listing) return res.status(404).json({ error: 'Listing not found' });
-    
-    // Check if user already reviewed this listing
-    const existing = await prisma.review.findUnique({
-      where: { listingId_userId: { listingId, userId: req.user.id } }
+    // Check if booking exists and belongs to user
+    const booking = await prisma.booking.findUnique({ 
+      where: { id: parseInt(bookingId) },
+      include: { 
+        listing: { include: { host: true } },
+        user: true
+      }
     });
-    if (existing) {
-      return res.status(409).json({ error: 'You have already reviewed this listing' });
+    
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
     }
     
+    if (booking.userId !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized to review this booking' });
+    }
+    
+    // Check if booking is completed
+    if (booking.status !== 'COMPLETED' && new Date() < new Date(booking.checkOut)) {
+      return res.status(400).json({ error: 'Can only review completed stays' });
+    }
+    
+    // Check if review already exists for this booking
+    const existing = await prisma.review.findUnique({
+      where: { bookingId: parseInt(bookingId) }
+    });
+    
+    if (existing) {
+      return res.status(409).json({ error: 'You have already reviewed this booking' });
+    }
+    
+    // Process uploaded photos
+    const photoUrls = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const filename = `review-${Date.now()}-${Math.random().toString(36).substr(2, 9)}.jpg`;
+        const url = await processAndSaveImage(file.buffer, filename, 'reviews');
+        photoUrls.push(url);
+      }
+    }
+    
+    // Create review with photos
     const review = await prisma.review.create({
       data: {
-        listingId,
+        bookingId: parseInt(bookingId),
+        listingId: booking.listingId,
         userId: req.user.id,
-        rating: Number(rating),
-        comment: comment || '',
+        overallRating: parseInt(overallRating),
+        cleanlinessRating: cleanlinessRating ? parseInt(cleanlinessRating) : null,
+        accuracyRating: accuracyRating ? parseInt(accuracyRating) : null,
+        checkInRating: checkInRating ? parseInt(checkInRating) : null,
+        communicationRating: communicationRating ? parseInt(communicationRating) : null,
+        locationRating: locationRating ? parseInt(locationRating) : null,
+        valueRating: valueRating ? parseInt(valueRating) : null,
+        comment: comment || null,
+        photos: {
+          create: photoUrls.map((url, index) => ({
+            url,
+            caption: null
+          }))
+        }
       },
-      include: { user: { select: { id: true, name: true, avatar: true } } }
+      include: { 
+        user: { select: { id: true, name: true, avatar: true } },
+        photos: true,
+        booking: { 
+          select: { 
+            checkIn: true, 
+            checkOut: true,
+            listing: { select: { title: true, host: { select: { name: true, email: true } } } }
+          } 
+        }
+      }
     });
+    
+    // Send email notification to host (non-blocking)
+    emailService.sendReviewNotification(review).catch(err =>
+      console.error('Failed to send review notification:', err)
+    );
     
     res.status(201).json(review);
   } catch (err) {
@@ -884,27 +956,55 @@ app.post('/api/listings/:id/reviews', authMiddleware, async (req, res) => {
   }
 });
 
-// UPDATE a review
-app.patch('/api/reviews/:id', authMiddleware, async (req, res) => {
+// PATCH - Host responds to a review
+app.patch('/api/reviews/:id/respond', authMiddleware, async (req, res) => {
   try {
     const reviewId = Number(req.params.id);
-    const { rating, comment } = req.body;
+    const { hostResponse } = req.body;
     
-    // Check ownership
-    const review = await prisma.review.findUnique({ where: { id: reviewId } });
-    if (!review) return res.status(404).json({ error: 'Review not found' });
-    if (review.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized' });
+    if (!hostResponse || hostResponse.trim().length === 0) {
+      return res.status(400).json({ error: 'Response cannot be empty' });
+    }
+    
+    // Get review with listing to check host ownership
+    const review = await prisma.review.findUnique({ 
+      where: { id: reviewId },
+      include: { 
+        listing: { select: { hostId: true } },
+        user: { select: { name: true, email: true } },
+        booking: { select: { listing: { select: { title: true } } } }
+      }
+    });
+    
+    if (!review) {
+      return res.status(404).json({ error: 'Review not found' });
+    }
+    
+    if (review.listing.hostId !== req.user.id) {
+      return res.status(403).json({ error: 'Only the host can respond to this review' });
     }
     
     const updated = await prisma.review.update({
       where: { id: reviewId },
       data: {
-        ...(rating && { rating: Number(rating) }),
-        ...(comment !== undefined && { comment }),
+        hostResponse: hostResponse.trim(),
+        hostRespondedAt: new Date()
       },
-      include: { user: { select: { id: true, name: true, avatar: true } } }
+      include: { 
+        user: { select: { id: true, name: true, avatar: true } },
+        photos: true
+      }
     });
+    
+    // Send email notification to guest (non-blocking)
+    emailService.sendHostResponseNotification({
+      ...updated,
+      guestName: review.user.name,
+      guestEmail: review.user.email,
+      listingTitle: review.booking.listing.title
+    }).catch(err =>
+      console.error('Failed to send host response notification:', err)
+    );
     
     res.json(updated);
   } catch (err) {
@@ -913,24 +1013,31 @@ app.patch('/api/reviews/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// DELETE a review
-app.delete('/api/reviews/:id', authMiddleware, async (req, res) => {
+// GET reviews that need response (for hosts)
+app.get('/api/reviews/pending-response', authMiddleware, async (req, res) => {
   try {
-    const reviewId = Number(req.params.id);
+    const reviews = await prisma.review.findMany({
+      where: {
+        listing: { hostId: req.user.id },
+        hostResponse: null,
+        isPublic: true
+      },
+      include: {
+        user: { select: { id: true, name: true, avatar: true } },
+        listing: { select: { id: true, title: true } },
+        photos: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
     
-    const review = await prisma.review.findUnique({ where: { id: reviewId } });
-    if (!review) return res.status(404).json({ error: 'Review not found' });
-    if (review.userId !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
-    
-    await prisma.review.delete({ where: { id: reviewId } });
-    res.json({ message: 'Review deleted' });
+    res.json(reviews);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// DELETE review endpoint removed - reviews are permanent for integrity
 
 // ========== WISHLIST ENDPOINTS ==========
 

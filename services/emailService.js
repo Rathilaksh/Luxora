@@ -39,16 +39,16 @@ async function sendBookingConfirmation(booking) {
   }
 
   try {
-    const { user, listing, startDate, endDate, guests, totalPrice } = booking;
+    const { user, listing, checkIn: checkInDate, checkOut: checkOutDate, guests, totalPrice } = booking;
     
-    const checkIn = new Date(startDate).toLocaleDateString('en-US', { 
+    const checkIn = new Date(checkInDate).toLocaleDateString('en-US', { 
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
     });
-    const checkOut = new Date(endDate).toLocaleDateString('en-US', { 
+    const checkOut = new Date(checkOutDate).toLocaleDateString('en-US', { 
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
     });
     
-    const nights = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+    const nights = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24));
 
     const html = `
       <!DOCTYPE html>
@@ -270,7 +270,7 @@ async function sendWelcomeEmail(user) {
   }
 }
 
-// Send host notification when they receive a booking
+// Send host booking notification
 async function sendHostBookingNotification(booking) {
   if (!isEmailConfigured()) {
     console.log('Email not configured, skipping host notification email');
@@ -278,16 +278,16 @@ async function sendHostBookingNotification(booking) {
   }
 
   try {
-    const { user, listing, startDate, endDate, guests, totalPrice } = booking;
+    const { user, listing, checkIn: checkInDate, checkOut: checkOutDate, guests, totalPrice } = booking;
     
-    const checkIn = new Date(startDate).toLocaleDateString('en-US', { 
+    const checkIn = new Date(checkInDate).toLocaleDateString('en-US', { 
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
     });
-    const checkOut = new Date(endDate).toLocaleDateString('en-US', { 
+    const checkOut = new Date(checkOutDate).toLocaleDateString('en-US', { 
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
     });
     
-    const nights = Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24));
+    const nights = Math.ceil((new Date(checkOutDate) - new Date(checkInDate)) / (1000 * 60 * 60 * 24));
 
     const html = `
       <!DOCTYPE html>
@@ -398,9 +398,166 @@ async function sendHostBookingNotification(booking) {
   }
 }
 
+// Send review notification to host
+async function sendReviewNotification(review) {
+  if (!isEmailConfigured()) {
+    console.log('Email not configured, skipping review notification');
+    return { success: false, reason: 'not_configured' };
+  }
+
+  try {
+    const { booking, user } = review;
+    const hostEmail = booking.listing.host.email;
+    const hostName = booking.listing.host.name;
+    const listingTitle = booking.listing.title;
+    
+    const stars = '⭐'.repeat(review.overallRating);
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #ff385c 0%, #ff5575 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .rating { font-size: 32px; margin: 20px 0; }
+            .review-box { background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #ff385c; margin: 20px 0; }
+            .button { display: inline-block; padding: 12px 24px; background: #ff385c; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>📝 New Review Received!</h1>
+            </div>
+            <div class="content">
+              <p>Hi ${hostName},</p>
+              <p><strong>${user.name}</strong> just left a review for <strong>${listingTitle}</strong>!</p>
+              
+              <div class="rating">${stars}</div>
+              <p style="font-size: 18px; color: #ff385c;"><strong>${review.overallRating} out of 5 stars</strong></p>
+              
+              ${review.comment ? `
+                <div class="review-box">
+                  <p style="font-style: italic; margin: 0;">"${review.comment}"</p>
+                </div>
+              ` : ''}
+              
+              ${review.cleanlinessRating || review.accuracyRating || review.locationRating ? `
+                <h3>Rating Breakdown:</h3>
+                <ul>
+                  ${review.cleanlinessRating ? `<li>Cleanliness: ${review.cleanlinessRating}/5</li>` : ''}
+                  ${review.accuracyRating ? `<li>Accuracy: ${review.accuracyRating}/5</li>` : ''}
+                  ${review.checkInRating ? `<li>Check-in: ${review.checkInRating}/5</li>` : ''}
+                  ${review.communicationRating ? `<li>Communication: ${review.communicationRating}/5</li>` : ''}
+                  ${review.locationRating ? `<li>Location: ${review.locationRating}/5</li>` : ''}
+                  ${review.valueRating ? `<li>Value: ${review.valueRating}/5</li>` : ''}
+                </ul>
+              ` : ''}
+              
+              <p>You can respond to this review to show your appreciation or address any concerns.</p>
+              
+              <a href="${CLIENT_URL}" class="button">View Review & Respond</a>
+              
+              <div class="footer">
+                <p>Thank you for being a great host on Luxora!</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"Luxora" <${EMAIL_FROM}>`,
+      to: hostEmail,
+      subject: `New Review - ${listingTitle}`,
+      html: html,
+      text: `New Review Received!\n\nHi ${hostName},\n\n${user.name} just left a ${review.overallRating}-star review for ${listingTitle}!\n\n${review.comment ? `"${review.comment}"\n\n` : ''}You can respond to this review at ${CLIENT_URL}\n\nThank you for hosting on Luxora!`
+    };
+
+    await getTransporter().sendMail(mailOptions);
+    console.log(`Review notification sent to ${hostEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending review notification:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+// Send host response notification to guest
+async function sendHostResponseNotification(data) {
+  if (!isEmailConfigured()) {
+    console.log('Email not configured, skipping host response notification');
+    return { success: false, reason: 'not_configured' };
+  }
+
+  try {
+    const { guestName, guestEmail, listingTitle, hostResponse } = data;
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #ff385c 0%, #ff5575 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }
+            .response-box { background: white; padding: 20px; border-radius: 8px; border-left: 4px solid #ff385c; margin: 20px 0; }
+            .button { display: inline-block; padding: 12px 24px; background: #ff385c; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }
+            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>💬 The Host Responded to Your Review!</h1>
+            </div>
+            <div class="content">
+              <p>Hi ${guestName},</p>
+              <p>The host of <strong>${listingTitle}</strong> has responded to your review!</p>
+              
+              <div class="response-box">
+                <p style="font-style: italic; margin: 0;">"${hostResponse}"</p>
+              </div>
+              
+              <a href="${CLIENT_URL}" class="button">View Full Review</a>
+              
+              <div class="footer">
+                <p>Thank you for being part of the Luxora community!</p>
+              </div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const mailOptions = {
+      from: `"Luxora" <${EMAIL_FROM}>`,
+      to: guestEmail,
+      subject: `Host Response - ${listingTitle}`,
+      html: html,
+      text: `Host Response!\n\nHi ${guestName},\n\nThe host of ${listingTitle} has responded to your review:\n\n"${hostResponse}"\n\nView the full review at ${CLIENT_URL}\n\nThank you for being part of Luxora!`
+    };
+
+    await getTransporter().sendMail(mailOptions);
+    console.log(`Host response notification sent to ${guestEmail}`);
+    return { success: true };
+  } catch (error) {
+    console.error('Error sending host response notification:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 module.exports = {
   sendBookingConfirmation,
   sendWelcomeEmail,
   sendHostBookingNotification,
+  sendReviewNotification,
+  sendHostResponseNotification,
   isEmailConfigured
 };
