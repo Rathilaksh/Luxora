@@ -23,6 +23,8 @@ export default function FilterPanel({ filters, onFilterChange, amenities = [] })
       bathrooms: '',
       amenities: [],
       sortBy: '',
+      instantBook: false,
+      petFriendly: false,
     };
     setLocalFilters(resetFilters);
     onFilterChange(resetFilters);
@@ -183,6 +185,27 @@ export default function FilterPanel({ filters, onFilterChange, amenities = [] })
                   <option value="price_desc">Price: High to Low</option>
                   <option value="rating">Highest Rated</option>
                 </select>
+              </div>
+
+              {/* Quick Toggles */}
+              <div className="filter-section">
+                <h3>Quick Toggles</h3>
+                <label className="amenity-checkbox" style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(localFilters.instantBook)}
+                    onChange={(e) => setLocalFilters({ ...localFilters, instantBook: e.target.checked })}
+                  />
+                  <span>⚡ Instant Book</span>
+                </label>
+                <label className="amenity-checkbox" style={{ display:'flex', alignItems:'center', gap:8 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(localFilters.petFriendly)}
+                    onChange={(e) => setLocalFilters({ ...localFilters, petFriendly: e.target.checked })}
+                  />
+                  <span>🐶 Pet Friendly</span>
+                </label>
               </div>
             </div>
 

@@ -14,6 +14,7 @@ model User {
   name         String
   email        String     @unique
   passwordHash String?
+  role         String     @default("GUEST") // GUEST, HOST, BOTH
   avatar       String?
   bio          String?
   phone        String?
@@ -52,6 +53,7 @@ model Listing {
   maxGuests   Int       @default(2)
   baseGuests  Int       @default(2)  // Number of guests included in base price
   extraGuestFee Int     @default(0)  // Additional fee per guest beyond baseGuests
+  instantBookEnabled Boolean @default(false) // Enable instant booking without host approval
   host        User      @relation("HostListings", fields: [hostId], references: [id], onDelete: Cascade)
   hostId      Int
   bookings    Booking[]

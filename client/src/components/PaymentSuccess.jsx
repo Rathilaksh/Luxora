@@ -12,6 +12,7 @@ export default function PaymentSuccess({ sessionId, onClose }) {
 
   const verifyPayment = async () => {
     try {
+      console.log('Verifying payment for session:', sessionId);
       const token = localStorage.getItem('token');
       const response = await fetch(`/api/payments/verify/${sessionId}`, {
         headers: {
@@ -19,7 +20,9 @@ export default function PaymentSuccess({ sessionId, onClose }) {
         }
       });
 
+      console.log('Verify response status:', response.status);
       const data = await response.json();
+      console.log('Verify response data:', data);
 
       if (!response.ok) {
         throw new Error(data.error || 'Failed to verify payment');

@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { loadStripe } from '@stripe/stripe-js';
 import { Calendar, Users, CreditCard, AlertCircle } from 'lucide-react';
 import AvailabilityCalendar from './AvailabilityCalendar';
 import { format } from 'date-fns';
 
-// Initialize Stripe (use your publishable key)
-// For testing, Stripe test mode works without real key if backend has test key
-const stripePromise = loadStripe('pk_test_51placeholder_use_real_key_in_production');
+// Stripe disabled for demo mode - will use mock payments
+const stripePromise = null;
 
 export default function BookingForm({ listing, onClose }) {
   const [dateRange, setDateRange] = useState(null);
@@ -19,23 +17,28 @@ export default function BookingForm({ listing, onClose }) {
 
   // Calculate nights and total price
   const calculatePrice = () => {
-    if (!checkIn || !checkOut) return 0;
+    if (!checkIn || !checkOut) return { subtotal: 0, cleaningFee: 0, serviceFee: 0, total: 0 };
     const nights = Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
-    let total = nights * listing.price;
+    let subtotal = nights * listing.price;
     
     // Add extra guest fee if applicable
     if (guests > listing.baseGuests) {
       const extraGuests = guests - listing.baseGuests;
-      total += nights * extraGuests * listing.extraGuestFee;
+      subtotal += nights * extraGuests * listing.extraGuestFee;
     }
     
-    return total;
+    // Calculate fees
+    const cleaningFee = Math.round(listing.price * 0.15); // 15% of nightly rate
+    const serviceFee = Math.round(subtotal * 0.12); // 12% service fee
+    const total = subtotal + cleaningFee + serviceFee;
+    
+    return { subtotal, cleaningFee, serviceFee, total, extraGuestFee: guests > listing.baseGuests ? (guests - listing.baseGuests) * nights * listing.extraGuestFee : 0 };
   };
 
   const nights = checkIn && checkOut 
     ? Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24))
     : 0;
-  const totalPrice = calculatePrice();
+  const pricing = calculatePrice();
 
   const handleBooking = async (e) => {
     e.preventDefault();
@@ -84,22 +87,18 @@ export default function BookingForm({ listing, onClose }) {
       }
 
       // If backend is in mock mode (no Stripe key), skip redirect
-      if (data.mode === 'mock') {
+      if (data.mode === 'mock' || !data.url) {
         // Simulate success: trigger app payment success handler via URL params
-        const mockSession = data.sessionId || 'mock_session';
+        const mockSession = data.sessionId || 'mock_session_' + Date.now();
         const url = `/?payment=success&session_id=${encodeURIComponent(mockSession)}`;
         window.location.assign(url);
         return;
       }
 
-      // Redirect to Stripe Checkout when configured
-      const stripe = await stripePromise;
-      const { error: stripeError } = await stripe.redirectToCheckout({
-        sessionId: data.sessionId
-      });
-
-      if (stripeError) {
-        throw new Error(stripeError.message);
+      // If we have a Stripe URL, redirect directly (no client-side SDK needed)
+      if (data.url) {
+        window.location.assign(data.url);
+        return;
       }
     } catch (err) {
       console.error('Booking error:', err);
@@ -172,18 +171,27 @@ export default function BookingForm({ listing, onClose }) {
           {nights > 0 && (
             <div className="booking-summary">
               <div className="summary-row">
-                <span>${listing.price} × {nights} nights</span>
+                <span>${listing.price} × {nights} night{nights !== 1 ? 's' : ''}</span>
                 <span>${listing.price * nights}</span>
               </div>
-              {guests > listing.baseGuests && (
+              {guests > listing.baseGuests && pricing.extraGuestFee > 0 && (
                 <div className="summary-row">
-                  <span>Extra guest fee ({guests - listing.baseGuests} guests × {nights} nights)</span>
-                  <span>${(guests - listing.baseGuests) * nights * listing.extraGuestFee}</span>
+                  <span>Extra guest fee ({guests - listing.baseGuests} × {nights} nights)</span>
+                  <span>${pricing.extraGuestFee}</span>
                 </div>
               )}
+              <div className="summary-row">
+                <span>Cleaning fee</span>
+                <span>${pricing.cleaningFee}</span>
+              </div>
+              <div className="summary-row">
+                <span>Service fee</span>
+                <span>${pricing.serviceFee}</span>
+              </div>
+              <hr className="summary-divider" />
               <div className="summary-row total">
-                <span>Total</span>
-                <span>${totalPrice}</span>
+                <span><strong>Total</strong></span>
+                <span><strong>${pricing.total}</strong></span>
               </div>
             </div>
           )}

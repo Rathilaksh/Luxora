@@ -8,6 +8,7 @@ import FilterPanel from './components/FilterPanel';
 import BookingForm from './components/BookingForm';
 import PaymentSuccess from './components/PaymentSuccess';
 import BookingDashboard from './components/BookingDashboard';
+import HostDashboard from './components/HostDashboard';
 import Login from './components/Login';
 import Register from './components/Register';
 import { useAuth } from './context/AuthContext';
@@ -51,6 +52,8 @@ function useListings(filters, reloadKey) {
     if (filters.amenities && filters.amenities.length > 0) {
       params.set('amenities', filters.amenities.join(','));
     }
+    if (filters.instantBook) params.set('instantBook', 'true');
+    if (filters.petFriendly) params.set('petFriendly', 'true');
     
     setLoading(true);
     const endpoint = useSearchEndpoint ? '/api/listings/search' : '/api/listings';
@@ -516,21 +519,29 @@ function ListingModal({ listing, token, handleBookNow, onClose }) {
 export default function App() {
   const { user, token, logout } = useAuth();
   
+  // Initialize filters from URL params
+  const getFiltersFromURL = () => {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      location: params.get('location') || '',
+      checkIn: params.get('checkIn') || null,
+      checkOut: params.get('checkOut') || null,
+      guests: params.get('guests') ? Number(params.get('guests')) : null,
+      city: params.get('city') || '',
+      roomType: params.get('roomType') || '',
+      priceMin: params.get('priceMin') || '',
+      priceMax: params.get('priceMax') || '',
+      bedrooms: params.get('bedrooms') || '',
+      bathrooms: params.get('bathrooms') || '',
+      amenities: params.get('amenities') ? params.get('amenities').split(',').map(Number) : [],
+      sortBy: params.get('sortBy') || '',
+      instantBook: params.get('instantBook') === 'true',
+      petFriendly: params.get('petFriendly') === 'true',
+    };
+  };
+  
   // Search and filter state
-  const [filters, setFilters] = useState({ 
-    location: '',
-    checkIn: null,
-    checkOut: null,
-    guests: null,
-    city: '', 
-    roomType: '', 
-    priceMin: '', 
-    priceMax: '',
-    bedrooms: '',
-    bathrooms: '',
-    amenities: [],
-    sortBy: ''
-  });
+  const [filters, setFilters] = useState(getFiltersFromURL);
   const [term, setTerm] = useState('');
   const [page, setPage] = useState(1);
   const perPage = 12;
@@ -548,6 +559,7 @@ export default function App() {
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [paymentSessionId, setPaymentSessionId] = useState(null);
   const [showBookingDashboard, setShowBookingDashboard] = useState(false);
+  const [showHostDashboard, setShowHostDashboard] = useState(false);
   
   // Auth modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -593,6 +605,28 @@ export default function App() {
     setFilters(prev => ({ ...prev, ...newFilters }));
     setPage(1);
   };
+
+  // Sync filters to URL for shareable search links
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filters.location) params.set('location', filters.location);
+    if (filters.checkIn) params.set('checkIn', filters.checkIn);
+    if (filters.checkOut) params.set('checkOut', filters.checkOut);
+    if (filters.guests) params.set('guests', filters.guests.toString());
+    if (filters.city) params.set('city', filters.city);
+    if (filters.roomType) params.set('roomType', filters.roomType);
+    if (filters.priceMin) params.set('priceMin', filters.priceMin);
+    if (filters.priceMax) params.set('priceMax', filters.priceMax);
+    if (filters.bedrooms) params.set('bedrooms', filters.bedrooms);
+    if (filters.bathrooms) params.set('bathrooms', filters.bathrooms);
+    if (filters.amenities?.length > 0) params.set('amenities', filters.amenities.join(','));
+    if (filters.sortBy) params.set('sortBy', filters.sortBy);
+    if (filters.instantBook) params.set('instantBook', 'true');
+    if (filters.petFriendly) params.set('petFriendly', 'true');
+    
+    const newURL = params.toString() ? `?${params.toString()}` : window.location.pathname;
+    window.history.replaceState({}, '', newURL);
+  }, [filters]);
 
   // Wishlist state
   const [wishlistIds, setWishlistIds] = useState(new Set());
@@ -751,6 +785,7 @@ export default function App() {
               <button className="theme-toggle" onClick={()=> { setView('browse'); setSelected(null); }}>Browse</button>
               <button className="theme-toggle" onClick={()=> setView('wishlist')}>Wishlist ({wishlistIds.size})</button>
               <button className="theme-toggle" onClick={()=> setShowBookingDashboard(true)}>My Bookings</button>
+              <button className="theme-toggle" onClick={()=> setShowHostDashboard(true)}>Host Dashboard</button>
               <button className="theme-toggle" onClick={()=> { setView('messages'); setConversationWith(null); }}>Messages</button>
               {conversationWith && view==='conversation' && (
                 <button className="theme-toggle" onClick={()=> setView('messages')}>Back</button>
@@ -766,10 +801,12 @@ export default function App() {
                   ) : null}
                   <span className="badge">{user.name}</span>
                 </button>
+                 <a href="/host" className="host-link">Become a Host</a>
                 <button onClick={logout}>Logout</button>
               </>
             ) : (
               <>
+                 <a href="/host" className="host-link">Become a Host</a>
                 <button onClick={() => { setAuthMode('login'); setShowAuthModal(true); }}>Login</button>
                 <button className="theme-toggle" onClick={() => { setAuthMode('register'); setShowAuthModal(true); }}>Sign Up</button>
               </>
@@ -831,6 +868,18 @@ export default function App() {
                   <button onClick={() => handleFilterChange({ amenities: [] })}>×</button>
                 </div>
               )}
+              {filters.instantBook && (
+                <div className="filter-tag">
+                  <span>⚡ Instant Book</span>
+                  <button onClick={() => handleFilterChange({ instantBook: false })}>×</button>
+                </div>
+              )}
+              {filters.petFriendly && (
+                <div className="filter-tag">
+                  <span>🐶 Pet Friendly</span>
+                  <button onClick={() => handleFilterChange({ petFriendly: false })}>×</button>
+                </div>
+              )}
               {filters.sortBy && (
                 <div className="filter-tag">
                   <span>⬆️ {filters.sortBy.replace('_', ' ')}</span>
@@ -839,68 +888,8 @@ export default function App() {
               )}
             </div>
             
-            <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'1rem 0'}} />
-            <h3 style={{marginTop:0}}>Create Listing</h3>
-            {user ? (
-              <form onSubmit={handleCreateListing} style={{display:'flex',flexDirection:'column',gap:'.65rem'}}>
-                <input 
-                  required 
-                  placeholder="Title *" 
-                  value={form.title} 
-                  onChange={e => setForm(f => ({...f, title: e.target.value}))} 
-                />
-                <input 
-                  required 
-                  placeholder="City *" 
-                  value={form.city} 
-                  onChange={e => setForm(f => ({...f, city: e.target.value}))} 
-                />
-                <input 
-                  required 
-                  placeholder="Price per night *" 
-                  type="number" 
-                  min="1"
-                  value={form.price} 
-                  onChange={e => setForm(f => ({...f, price: e.target.value}))} 
-                />
-                <input 
-                  placeholder="Image URL (optional)" 
-                  value={form.image} 
-                  onChange={e => setForm(f => ({...f, image: e.target.value}))} 
-                />
-                <select 
-                  value={form.roomType} 
-                  onChange={e => setForm(f => ({...f, roomType: e.target.value}))}
-                  style={{padding:'.55rem .6rem',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',fontSize:'.85rem',background:'#fff'}}
-                >
-                  <option value="ENTIRE_PLACE">Entire Place</option>
-                  <option value="PRIVATE_ROOM">Private Room</option>
-                  <option value="SHARED_ROOM">Shared Room</option>
-                </select>
-                <textarea 
-                  placeholder="Description (optional)" 
-                  value={form.description} 
-                  onChange={e => setForm(f => ({...f, description: e.target.value}))} 
-                  style={{minHeight:'70px',padding:'.55rem .6rem',border:'1px solid var(--border)',borderRadius:'var(--radius-sm)',fontSize:'.85rem',fontFamily:'inherit',resize:'vertical'}} 
-                />
-                <button 
-                  type="submit" 
-                  style={{background:'var(--gradient)',color:'#fff',border:0,padding:'.65rem',borderRadius:'var(--radius-sm)',fontSize:'.85rem',cursor:'pointer',fontWeight:600,letterSpacing:'.3px'}} 
-                  disabled={creating}
-                >
-                  {creating ? 'Creating...' : 'Create Listing'}
-                </button>
-                {createMsg && (
-                  <div className={createMsg.type === 'success' ? 'alert success' : 'alert'}>
-                    {createMsg.msg}
-                  </div>
-                )}
-              </form>
-            ) : (
-              <div style={{fontSize:'.75rem',color:'var(--muted)',padding:'.5rem 0'}}>
-                Login to create listings as a host.
-              </div>
-            )}
+            {/* Show create listing only for hosts and not in guest portal */}
+            {/* Host tools notice removed per request */}
           </aside>
           <section style={{ display:'flex', flexDirection:'column', gap:'1.2rem' }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -1053,6 +1042,14 @@ export default function App() {
         <BookingDashboard
           token={token}
           onClose={() => setShowBookingDashboard(false)}
+        />
+      )}
+
+      {/* Host Dashboard */}
+      {showHostDashboard && (
+        <HostDashboard
+          token={token}
+          onClose={() => setShowHostDashboard(false)}
         />
       )}
       

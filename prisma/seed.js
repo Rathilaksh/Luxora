@@ -12,23 +12,27 @@ async function main() {
 
   const host = await prisma.user.upsert({
     where: { email: 'host@luxora.dev' },
-    update: { passwordHash: hostPassword },
+    update: { passwordHash: hostPassword, isVerified: true, isSuperhost: true, role: 'HOST' },
     create: { 
       name: 'Luxora Host', 
       email: 'host@luxora.dev', 
       passwordHash: hostPassword,
+      role: 'HOST',
       bio: 'Experienced host with 5+ years of hosting travelers from around the world.',
-      phone: '+1-555-0100'
+      phone: '+1-555-0100',
+      isVerified: true,
+      isSuperhost: true
     },
   });
 
   const guest = await prisma.user.upsert({
     where: { email: 'guest@luxora.dev' },
-    update: { passwordHash: guestPassword },
+    update: { passwordHash: guestPassword, role: 'GUEST' },
     create: { 
       name: 'Luxora Guest', 
       email: 'guest@luxora.dev', 
       passwordHash: guestPassword,
+      role: 'GUEST',
       bio: 'Travel enthusiast exploring new cities.',
       phone: '+1-555-0101'
     },
@@ -36,11 +40,12 @@ async function main() {
 
   const guest2 = await prisma.user.upsert({
     where: { email: 'sarah@example.com' },
-    update: { passwordHash: guest2Password },
+    update: { passwordHash: guest2Password, role: 'GUEST' },
     create: { 
       name: 'Sarah Johnson', 
       email: 'sarah@example.com', 
       passwordHash: guest2Password,
+      role: 'GUEST',
       bio: 'Digital nomad working remotely.',
       phone: '+1-555-0102'
     },
@@ -65,6 +70,7 @@ async function main() {
     { name: 'Smoke alarm', icon: '🚨', category: 'Safety' },
     { name: 'Fire extinguisher', icon: '🧯', category: 'Safety' },
     { name: 'First aid kit', icon: '🏥', category: 'Safety' },
+    { name: 'Pet friendly', icon: '🐶', category: 'General' },
   ];
 
   const amenities = {};
@@ -96,6 +102,7 @@ async function main() {
       image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400',
       roomType: 'ENTIRE_PLACE',
       hostId: host.id,
+      instantBookEnabled: true,
       amenities: ['WiFi', 'Kitchen', 'Washer', 'Air conditioning', 'Workspace', 'Smoke alarm']
     },
     {
@@ -130,6 +137,7 @@ async function main() {
       image: 'https://images.unsplash.com/photo-1449158743715-0a90ebb6d2d8?w=400',
       roomType: 'ENTIRE_PLACE',
       hostId: host.id,
+      instantBookEnabled: true,
       amenities: ['WiFi', 'Kitchen', 'Washer', 'Dryer', 'Heating', 'Hot tub', 'Free parking', 'Fire extinguisher']
     },
     {
@@ -181,6 +189,7 @@ async function main() {
       image: 'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=400',
       roomType: 'ENTIRE_PLACE',
       hostId: host.id,
+      instantBookEnabled: true,
       amenities: ['WiFi', 'Kitchen', 'Air conditioning', 'Pool', 'TV', 'Free parking', 'Smoke alarm']
     },
     {
@@ -273,6 +282,13 @@ async function main() {
       });
     }
 
+    // Add pet friendly amenity to every 3rd listing for testing (heuristic for filter)
+    if (listing.id % 3 === 0 && amenities['Pet friendly']) {
+      await prisma.listingAmenity.create({
+        data: { listingId: listing.id, amenityId: amenities['Pet friendly'].id }
+      });
+    }
+
     createdListings.push(listing);
   }
 
@@ -342,6 +358,7 @@ async function main() {
           },
         },
         listing: { connect: { id: createdListings[1].id } },
+        user: { connect: { id: guest2.id } },
         userId: guest2.id,
         overallRating: 4,
         comment: 'Great ocean views and comfortable bed. Would definitely stay again!',
@@ -431,6 +448,7 @@ async function main() {
   console.log('  Host: host@luxora.dev / hostpass123');
   console.log('  Guest 1: guest@luxora.dev / guestpass123');
   console.log('  Guest 2: sarah@example.com / guest2pass123');
+  console.log('\nFeature flags: Added Pet friendly amenity and assigned to subset of listings for filter testing.');
 }
 
 main()

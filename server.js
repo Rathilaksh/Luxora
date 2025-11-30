@@ -29,7 +29,7 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3002;
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_KEY_HERE';
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const CLIENT_URL = process.env.CLIENT_URL || `http://localhost:${PORT}`;
@@ -102,12 +102,22 @@ async function processAndSaveImage(buffer, filename, folder = 'listings') {
 
 app.post('/api/register', async (req, res) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, phone, bio, role } = req.body;
     if (!name || !email || !password) return res.status(400).json({ error: 'Missing fields' });
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return res.status(409).json({ error: 'Email already registered' });
     const passwordHash = bcrypt.hashSync(password, 10);
-    const user = await prisma.user.create({ data: { name, email, passwordHash } });
+    
+    const userData = { 
+      name, 
+      email, 
+      passwordHash,
+      role: role || 'GUEST' // Default to GUEST if not specified
+    };
+    if (phone) userData.phone = phone;
+    if (bio) userData.bio = bio;
+    
+    const user = await prisma.user.create({ data: userData });
     const token = createToken(user);
     
     // Send welcome email (non-blocking)
@@ -115,7 +125,7 @@ app.post('/api/register', async (req, res) => {
       console.error('Failed to send welcome email:', err)
     );
     
-    res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    res.status(201).json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -131,7 +141,7 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     const token = createToken(user);
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    res.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Server error' });
@@ -141,7 +151,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/me', authMiddleware, async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.user.id } });
   if (!user) return res.status(404).json({ error: 'Not found' });
-  res.json({ id: user.id, name: user.name, email: user.email, avatar: user.avatar, bio: user.bio, phone: user.phone, isVerified: user.isVerified, isSuperhost: user.isSuperhost });
+  res.json({ id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio, phone: user.phone, isVerified: user.isVerified, isSuperhost: user.isSuperhost });
 });
 
 // Update user profile
@@ -219,6 +229,8 @@ app.get('/api/listings/search', async (req, res) => {
       latitude, // for distance sorting
       longitude,
       radius, // search radius in km
+      instantBook,
+      petFriendly,
     } = req.query;
 
     const where = {};
@@ -297,6 +309,18 @@ app.get('/api/listings/search', async (req, res) => {
           return amenityIds.every(id => listingAmenityIds.includes(id));
         });
       }
+    }
+
+    // Quick toggle: Pet Friendly (by amenity name)
+    if (petFriendly === 'true') {
+      listings = listings.filter(listing =>
+        listing.amenities.some(a => (a.amenity?.name || '').toLowerCase() === 'pet friendly')
+      );
+    }
+
+    // Quick toggle: Instant Book (dedicated field)
+    if (instantBook === 'true') {
+      listings = listings.filter(listing => listing.instantBookEnabled === true);
     }
 
     // Calculate ratings and distance
@@ -620,6 +644,15 @@ app.post('/api/bookings', authMiddleware, async (req, res) => {
     if (!listingId || !checkIn || !checkOut) {
       return res.status(400).json({ error: 'Missing fields' });
     }
+    
+    // Get user to check role
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    
+    // Prevent hosts from making bookings
+    if (user.role === 'HOST') {
+      return res.status(403).json({ error: 'Host accounts cannot make bookings. Please create a guest account to book properties.' });
+    }
+    
     const start = new Date(checkIn);
     const end = new Date(checkOut);
     if (start >= end) return res.status(400).json({ error: 'Invalid date range' });
@@ -752,7 +785,215 @@ app.get('/api/bookings/hosting', authMiddleware, async (req, res) => {
   }
 });
 
+// Host analytics endpoint
+// Get host calendar view (all bookings across listings)
+app.get('/api/host/calendar', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { startDate, endDate } = req.query;
+
+    const where = {
+      listing: { hostId: userId }
+    };
+
+    // Filter by date range if provided
+    if (startDate || endDate) {
+      where.OR = [];
+      if (startDate) {
+        where.OR.push({ checkOut: { gte: new Date(startDate) } });
+      }
+      if (endDate) {
+        where.OR.push({ checkIn: { lte: new Date(endDate) } });
+      }
+    }
+
+    const bookings = await prisma.booking.findMany({
+      where,
+      include: {
+        listing: {
+          select: {
+            id: true,
+            title: true,
+            city: true,
+            image: true
+          }
+        },
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            phone: true
+          }
+        }
+      },
+      orderBy: { checkIn: 'asc' }
+    });
+
+    res.json(bookings);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/host/analytics', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all bookings for host's listings
+    const bookings = await prisma.booking.findMany({
+      where: {
+        listing: { hostId: userId },
+        status: { in: ['CONFIRMED', 'COMPLETED'] }
+      },
+      include: {
+        listing: { select: { price: true } }
+      }
+    });
+
+    // Calculate revenue
+    const totalRevenue = bookings.reduce((sum, b) => sum + b.totalPrice, 0);
+    
+    // Revenue this month
+    const now = new Date();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    
+    const thisMonthRevenue = bookings.filter(b => 
+      new Date(b.createdAt) >= thisMonthStart
+    ).reduce((sum, b) => sum + b.totalPrice, 0);
+    
+    const lastMonthRevenue = bookings.filter(b => {
+      const date = new Date(b.createdAt);
+      return date >= lastMonthStart && date < thisMonthStart;
+    }).reduce((sum, b) => sum + b.totalPrice, 0);
+    
+    const revenueGrowth = lastMonthRevenue > 0 
+      ? Math.round(((thisMonthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100)
+      : 0;
+
+    // Count upcoming bookings
+    const upcomingBookings = bookings.filter(b => 
+      new Date(b.checkIn) > now && b.status === 'CONFIRMED'
+    ).length;
+
+    // Get host's listings
+    const listings = await prisma.listing.findMany({
+      where: { hostId: userId },
+      include: {
+        bookings: { where: { status: { in: ['CONFIRMED', 'COMPLETED'] } } }
+      }
+    });
+
+    // Calculate occupancy rate
+    const totalDays = listings.reduce((sum, l) => {
+      const bookedDays = l.bookings.reduce((days, b) => {
+        const checkIn = new Date(b.checkIn);
+        const checkOut = new Date(b.checkOut);
+        return days + Math.ceil((checkOut - checkIn) / (1000 * 60 * 60 * 24));
+      }, 0);
+      return sum + bookedDays;
+    }, 0);
+    
+    const daysInYear = 365;
+    const occupancyRate = listings.length > 0 
+      ? Math.round((totalDays / (listings.length * daysInYear)) * 100)
+      : 0;
+
+    // Get reviews for host's listings
+    const reviews = await prisma.review.findMany({
+      where: {
+        listing: { hostId: userId }
+      },
+      select: { overallRating: true }
+    });
+
+    const averageRating = reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.overallRating, 0) / reviews.length
+      : 0;
+
+    // Monthly revenue breakdown (last 6 months)
+    const monthlyRevenue = [];
+    for (let i = 5; i >= 0; i--) {
+      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
+      
+      const revenue = bookings.filter(b => {
+        const date = new Date(b.createdAt);
+        return date >= monthStart && date < monthEnd;
+      }).reduce((sum, b) => sum + b.totalPrice, 0);
+      
+      monthlyRevenue.push({
+        month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        revenue
+      });
+    }
+
+    res.json({
+      userId,
+      totalRevenue,
+      revenueGrowth,
+      totalBookings: bookings.length,
+      upcomingBookings,
+      occupancyRate,
+      averageRating,
+      totalReviews: reviews.length,
+      listingsCount: listings.length,
+      monthlyRevenue
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Cancel a booking
+// Host actions: Accept/Reject booking
+app.patch('/api/bookings/:id/status', authMiddleware, async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id);
+    const { status } = req.body;
+
+    if (!['CONFIRMED', 'CANCELLED'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Must be CONFIRMED or CANCELLED' });
+    }
+
+    const booking = await prisma.booking.findUnique({
+      where: { id: bookingId },
+      include: { 
+        listing: { select: { hostId: true, title: true } },
+        user: { select: { name: true, email: true } }
+      }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    // Only host can accept/reject
+    if (booking.listing.hostId !== req.user.id) {
+      return res.status(403).json({ error: 'Only the host can change booking status' });
+    }
+
+    // Update booking status
+    const updated = await prisma.booking.update({
+      where: { id: bookingId },
+      data: { status },
+      include: {
+        listing: { select: { id: true, title: true, city: true, image: true } },
+        user: { select: { id: true, name: true, email: true } }
+      }
+    });
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.patch('/api/bookings/:id/cancel', authMiddleware, async (req, res) => {
   try {
     const bookingId = parseInt(req.params.id);
@@ -1306,18 +1547,6 @@ app.post('/api/pay/intent', authMiddleware, async (req, res) => {
   res.json({ clientSecret: 'mock_secret_123', amountPreview: req.body.amount || 0 });
 });
 
-// ========== FALLBACK ROUTE ==========
-
-// fallback to index.html for client-side routing
-app.get('*', (req, res) => {
-  const indexPath = path.join(__dirname, 'client', 'dist', 'index.html');
-  if (require('fs').existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    res.status(404).send('Run "npm run build:client" to build the frontend first.');
-  }
-});
-
 // ========== PAYMENT ENDPOINTS ==========
 
 // Create Stripe Checkout Session
@@ -1420,8 +1649,9 @@ app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
   try {
     const { sessionId } = req.params;
 
-    // Handle mock sessions (when Stripe not configured)
-    if (!stripe || sessionId.startsWith('mock_session_')) {
+    // Handle mock sessions (when Stripe not configured or mock session)
+    // Must check BEFORE calling Stripe API to avoid validation errors
+    if (!stripe || sessionId.includes('mock')) {
       return res.status(200).json({
         booking: {
           id: 0,
@@ -1436,8 +1666,15 @@ app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
       });
     }
 
+    // Only reach here if Stripe is configured AND it's not a mock session
     // Retrieve the session from Stripe
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    let session;
+    try {
+      session = await stripe.checkout.sessions.retrieve(sessionId);
+    } catch (stripeError) {
+      console.error('Stripe retrieve error:', stripeError);
+      return res.status(400).json({ error: 'Invalid session ID or session not found' });
+    }
 
     if (session.payment_status !== 'paid') {
       return res.status(400).json({ error: 'Payment not completed' });
@@ -1565,6 +1802,27 @@ app.post('/api/payments/webhook', express.raw({ type: 'application/json' }), asy
   res.json({ received: true });
 });
 
+// ========== FALLBACK ROUTE ==========
+
+// fallback to index.html for client-side routing
+app.get('*', (req, res) => {
+  const indexPath = path.join(__dirname, 'client', 'dist', 'index.html');
+  if (require('fs').existsSync(indexPath)) {
+    res.sendFile(indexPath);
+  } else {
+    res.status(404).send('Run "npm run build:client" to build the frontend first.');
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+});
+
+// Log unhandled promise rejections to aid debugging instead of silent exits
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled Promise Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
 });

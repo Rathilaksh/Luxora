@@ -13,7 +13,7 @@ export default function AvailabilityCalendar({ listingId, onSelect, selectedRang
 
   const loadAvailability = async () => {
     try {
-      const response = await fetch(`http://localhost:3000/api/listings/${listingId}/availability`);
+      const response = await fetch(`/api/listings/${listingId}/availability`);
       const data = await response.json();
       
       // Convert date strings to Date objects and generate all dates in range
