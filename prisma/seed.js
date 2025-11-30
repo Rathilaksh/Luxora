@@ -280,28 +280,31 @@ async function main() {
 
   // Create bookings
   const bookingsCount = await prisma.booking.count();
+  let booking1, booking2;
   if (bookingsCount === 0 && createdListings.length > 0) {
-    await prisma.booking.create({
+    booking1 = await prisma.booking.create({
       data: {
         listingId: createdListings[0].id,
         userId: guest.id,
-        startDate: new Date('2025-12-15'),
-        endDate: new Date('2025-12-18'),
+        checkIn: new Date('2025-12-15'),
+        checkOut: new Date('2025-12-18'),
         totalPrice: createdListings[0].price * 3,
         guests: 2,
         status: 'CONFIRMED',
+        paymentStatus: 'PAID',
       },
     });
 
-    await prisma.booking.create({
+    booking2 = await prisma.booking.create({
       data: {
         listingId: createdListings[2].id,
         userId: guest2.id,
-        startDate: new Date('2025-12-20'),
-        endDate: new Date('2025-12-25'),
+        checkIn: new Date('2025-12-20'),
+        checkOut: new Date('2025-12-25'),
         totalPrice: createdListings[2].price * 5,
         guests: 3,
         status: 'PENDING',
+        paymentStatus: 'UNPAID',
       },
     });
 
@@ -311,32 +314,51 @@ async function main() {
   // Create reviews
   const reviewsCount = await prisma.review.count();
   if (reviewsCount === 0 && createdListings.length > 0) {
-    await prisma.review.create({
-      data: {
-        listingId: createdListings[0].id,
-        userId: guest.id,
-        rating: 5,
-        comment: 'Amazing place! Perfect location and very clean. Host was super responsive and helpful.',
-      },
-    });
+    if (booking1) {
+      await prisma.review.create({
+        data: {
+          bookingId: booking1.id,
+          listingId: createdListings[0].id,
+          userId: guest.id,
+          overallRating: 5,
+          comment: 'Amazing place! Perfect location and very clean. Host was super responsive and helpful.',
+        },
+      });
+    }
 
     await prisma.review.create({
       data: {
-        listingId: createdListings[1].id,
+        // For a listing without a booking link, create a booking to satisfy schema
+        booking: {
+          create: {
+            listingId: createdListings[1].id,
+            userId: guest2.id,
+            checkIn: new Date('2025-12-10'),
+            checkOut: new Date('2025-12-12'),
+            totalPrice: createdListings[1].price * 2,
+            guests: 2,
+            status: 'COMPLETED',
+            paymentStatus: 'PAID',
+          },
+        },
+        listing: { connect: { id: createdListings[1].id } },
         userId: guest2.id,
-        rating: 4,
+        overallRating: 4,
         comment: 'Great ocean views and comfortable bed. Would definitely stay again!',
       },
     });
 
-    await prisma.review.create({
-      data: {
-        listingId: createdListings[2].id,
-        userId: guest.id,
-        rating: 5,
-        comment: 'The cabin was exactly as described. Hot tub was incredible. So peaceful and relaxing.',
-      },
-    });
+    if (booking2) {
+      await prisma.review.create({
+        data: {
+          bookingId: booking2.id,
+          listingId: createdListings[2].id,
+          userId: guest.id,
+          overallRating: 5,
+          comment: 'The cabin was exactly as described. Hot tub was incredible. So peaceful and relaxing.',
+        },
+      });
+    }
 
     console.log('✅ Reviews created');
   }

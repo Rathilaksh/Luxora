@@ -34,7 +34,10 @@ const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || 'sk_test_YOUR_KEY_HER
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || '';
 const CLIENT_URL = process.env.CLIENT_URL || `http://localhost:${PORT}`;
 
-const stripe = new Stripe(STRIPE_SECRET_KEY);
+// Only initialize Stripe if we have a valid key
+const stripe = (!STRIPE_SECRET_KEY || STRIPE_SECRET_KEY.includes('YOUR_KEY_HERE')) 
+  ? null 
+  : new Stripe(STRIPE_SECRET_KEY);
 
 function createToken(user) {
   return jwt.sign({ sub: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
@@ -433,7 +436,7 @@ app.get('/api/listings/:id', async (req, res) => {
 // Create listing (authenticated users only)
 app.post('/api/listings', authMiddleware, async (req, res) => {
   try {
-    const { title, description, city, country, address, price, image, roomType, bedrooms, bathrooms, maxGuests, amenities } = req.body;
+    const { title, description, city, country, address, price, image, roomType, bedrooms, bathrooms, maxGuests, amenities, latitude, longitude } = req.body;
     if (!title || !city || price == null) {
       return res.status(400).json({ error: 'Missing required fields: title, city, price' });
     }
@@ -455,6 +458,8 @@ app.post('/api/listings', authMiddleware, async (req, res) => {
         bedrooms: bedrooms ? Number(bedrooms) : 1,
         bathrooms: bathrooms ? Number(bathrooms) : 1,
         maxGuests: maxGuests ? Number(maxGuests) : 2,
+        latitude: (latitude !== undefined && latitude !== null && latitude !== '') ? Number(latitude) : null,
+        longitude: (longitude !== undefined && longitude !== null && longitude !== '') ? Number(longitude) : null,
         hostId: req.user.id,
       },
     });
@@ -1318,6 +1323,15 @@ app.get('*', (req, res) => {
 // Create Stripe Checkout Session
 app.post('/api/payments/create-checkout-session', authMiddleware, async (req, res) => {
   try {
+    // Validate Stripe configuration; if missing, fall back to mock mode
+    if (!stripe) {
+      return res.status(200).json({
+        mode: 'mock',
+        sessionId: 'mock_session_' + Date.now(),
+        message: 'Stripe not configured; proceeding without real payment',
+      });
+    }
+
     const { listingId, checkIn, checkOut, guests } = req.body;
 
     // Validate input
@@ -1394,7 +1408,7 @@ app.post('/api/payments/create-checkout-session', authMiddleware, async (req, re
       cancel_url: `${CLIENT_URL}/?payment=cancelled`,
     });
 
-    res.json({ sessionId: session.id, url: session.url });
+    res.json({ sessionId: session.id, url: session.url, mode: 'stripe' });
   } catch (err) {
     console.error('Stripe error:', err);
     res.status(500).json({ error: 'Failed to create checkout session' });
@@ -1405,6 +1419,22 @@ app.post('/api/payments/create-checkout-session', authMiddleware, async (req, re
 app.get('/api/payments/verify/:sessionId', authMiddleware, async (req, res) => {
   try {
     const { sessionId } = req.params;
+
+    // Handle mock sessions (when Stripe not configured)
+    if (!stripe || sessionId.startsWith('mock_session_')) {
+      return res.status(200).json({
+        booking: {
+          id: 0,
+          checkIn: new Date(),
+          checkOut: new Date(Date.now() + 86400000),
+          guests: 1,
+          totalPrice: 0,
+          listing: { title: 'Mock Booking (Stripe Not Configured)' }
+        },
+        mock: true,
+        message: 'This is a test booking. Configure Stripe to enable real payments.'
+      });
+    }
 
     // Retrieve the session from Stripe
     const session = await stripe.checkout.sessions.retrieve(sessionId);

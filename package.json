@@ -9,6 +9,7 @@
     "prisma:migrate": "npx prisma migrate dev --name init",
     "prisma:seed": "node prisma/seed.js",
     "db:init": "npm run prisma:migrate && npm run prisma:seed",
+    "db:reset": "rm -f prisma/dev.db && npm run prisma:migrate && npm run prisma:seed",
     "dev:client": "npm --prefix client run dev",
     "build:client": "npm --prefix client run build",
     "dev:full": "concurrently -k \"PORT=3002 node server.js\" \"npm run dev:client\""

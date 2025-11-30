@@ -31,7 +31,9 @@ export default function Register({ onSwitch, onSuccess }) {
       await register(name, email, password);
       if (onSuccess) onSuccess();
     } catch (err) {
-      setError(err.message);
+      // Surface server-provided error when available
+      const msg = err?.message || 'Registration failed';
+      setError(msg);
     } finally {
       setLoading(false);
     }

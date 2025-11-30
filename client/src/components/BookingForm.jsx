@@ -83,7 +83,16 @@ export default function BookingForm({ listing, onClose }) {
         throw new Error(data.error || 'Failed to create checkout session');
       }
 
-      // Redirect to Stripe Checkout
+      // If backend is in mock mode (no Stripe key), skip redirect
+      if (data.mode === 'mock') {
+        // Simulate success: trigger app payment success handler via URL params
+        const mockSession = data.sessionId || 'mock_session';
+        const url = `/?payment=success&session_id=${encodeURIComponent(mockSession)}`;
+        window.location.assign(url);
+        return;
+      }
+
+      // Redirect to Stripe Checkout when configured
       const stripe = await stripePromise;
       const { error: stripeError } = await stripe.redirectToCheckout({
         sessionId: data.sessionId

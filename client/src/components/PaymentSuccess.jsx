@@ -26,6 +26,12 @@ export default function PaymentSuccess({ sessionId, onClose }) {
       }
 
       setBooking(data.booking);
+      
+      // Show mock message if applicable
+      if (data.mock && data.message) {
+        // Don't set as error, just show in the success view
+        setBooking({ ...data.booking, mockMessage: data.message });
+      }
     } catch (err) {
       console.error('Verification error:', err);
       setError(err.message);
@@ -65,6 +71,14 @@ export default function PaymentSuccess({ sessionId, onClose }) {
         <CheckCircle size={64} color="#27ae60" />
         <h2>Booking Confirmed!</h2>
         
+        {booking?.mockMessage && (
+          <div className="booking-details" style={{ background: '#fff3cd', border: '1px solid #ffc107', borderRadius: '8px', padding: '12px', marginBottom: '16px' }}>
+            <p style={{ margin: 0, color: '#856404', fontSize: '0.9rem' }}>
+              ℹ️ {booking.mockMessage}
+            </p>
+          </div>
+        )}
+        
         {booking && (
           <div className="booking-details">
             <h3>{booking.listing.title}</h3>
@@ -84,15 +98,19 @@ export default function PaymentSuccess({ sessionId, onClose }) {
               <span>Total Paid:</span>
               <strong>${booking.totalPrice}</strong>
             </div>
-            <div className="detail-row">
-              <span>Booking ID:</span>
-              <strong>#{booking.id}</strong>
-            </div>
+            {booking.id > 0 && (
+              <div className="detail-row">
+                <span>Booking ID:</span>
+                <strong>#{booking.id}</strong>
+              </div>
+            )}
           </div>
         )}
 
         <p className="success-message">
-          A confirmation email has been sent to your email address.
+          {booking?.mockMessage 
+            ? 'This is a test booking confirmation.'
+            : 'A confirmation email has been sent to your email address.'}
         </p>
 
         <button className="status-btn" onClick={onClose}>

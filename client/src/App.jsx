@@ -4,7 +4,7 @@ import ImageGallery from './components/ImageGallery';
 import UserProfile from './components/UserProfile';
 import SearchBar from './components/SearchBar';
 import FilterPanel from './components/FilterPanel';
-import MapView from './components/MapView';
+// MapView disabled temporarily
 import BookingForm from './components/BookingForm';
 import PaymentSuccess from './components/PaymentSuccess';
 import BookingDashboard from './components/BookingDashboard';
@@ -153,9 +153,9 @@ function BookingBox({ listing, token, onClose }) {
   const unavailable = useMemo(() => {
     const bs = (listing?.bookings || []).filter(b => b.status !== 'CANCELLED');
     return bs.map(b => ({
-      start: new Date(b.startDate),
-      end: new Date(b.endDate)
-    }));
+      start: new Date(b.startDate || b.checkIn),
+      end: new Date(b.endDate || b.checkOut)
+    })).filter(r => r.start instanceof Date && !isNaN(r.start) && r.end instanceof Date && !isNaN(r.end));
   }, [listing]);
 
   function overlapsBlocked(s, e) {
@@ -462,7 +462,7 @@ function ListingModal({ listing, token, handleBookNow, onClose }) {
                         ) : null}
                         <strong>{r.user?.name || 'Guest'}</strong>
                       </div>
-                      <span>{'★'.repeat(r.rating)}<span style={{ color:'var(--muted)' }}>{'★'.repeat(5 - r.rating)}</span></span>
+                      <span>{'★'.repeat(r.rating ?? r.overallRating)}<span style={{ color:'var(--muted)' }}>{'★'.repeat(5 - (r.rating ?? r.overallRating))}</span></span>
                     </div>
                     {r.comment && <div style={{ marginTop: 4 }}>{r.comment}</div>}
                     <div style={{ color:'var(--muted)', fontSize:'.75rem', marginTop:4 }}>{new Date(r.createdAt).toLocaleDateString()}</div>
@@ -540,7 +540,7 @@ export default function App() {
   const [view, setView] = useState('browse'); // browse | wishlist | messages | conversation | profile | bookings
   const [conversationWith, setConversationWith] = useState(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'map'
+  // Map view disabled; always use grid
   
   // Booking and payment state
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -706,7 +706,10 @@ export default function App() {
     fetch('/api/listings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({ ...form, price: numPrice })
+      body: JSON.stringify({
+        ...form,
+        price: numPrice
+      })
     })
       .then(r => r.json())
       .then(data => {
@@ -780,22 +783,7 @@ export default function App() {
           <aside className="panel">
             <div className="search-controls">
               <FilterPanel filters={filters} onFilterChange={handleFilterChange} amenities={amenities} />
-              <div className="view-toggle">
-                <button 
-                  className={`view-toggle-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid size={16} />
-                  Grid
-                </button>
-                <button 
-                  className={`view-toggle-btn ${viewMode === 'map' ? 'active' : ''}`}
-                  onClick={() => setViewMode('map')}
-                >
-                  <MapIcon size={16} />
-                  Map
-                </button>
-              </div>
+              {/* Map toggle removed */}
             </div>
 
             <hr style={{border:'none',borderTop:'1px solid var(--border)',margin:'1rem 0'}} />
@@ -916,38 +904,26 @@ export default function App() {
           </aside>
           <section style={{ display:'flex', flexDirection:'column', gap:'1.2rem' }}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-              <h2 style={{margin:0,fontSize:'1.15rem'}}>
-                {viewMode === 'grid' ? 'Explore listings' : 'Map view'}
-              </h2>
+              <h2 style={{margin:0,fontSize:'1.15rem'}}>Explore listings</h2>
               <div style={{fontSize:'.8rem',color:'var(--muted)'}}>{filtered.length} result{filtered.length===1?'':'s'}</div>
             </div>
             {loading ? (
-              viewMode === 'grid' ? (
-                <div className="grid">
-                  {Array.from({length:8}).map((_,i)=> (
-                    <div key={i} className="card skeleton">
-                      <div className="card-img" />
-                      <div className="card-body">
-                        <div className="line" style={{width:'70%'}} />
-                        <div className="line" style={{width:'40%'}} />
-                      </div>
+              <div className="grid">
+                {Array.from({length:8}).map((_,i)=> (
+                  <div key={i} className="card skeleton">
+                    <div className="card-img" />
+                    <div className="card-body">
+                      <div className="line" style={{width:'70%'}} />
+                      <div className="line" style={{width:'40%'}} />
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <div style={{padding:'2rem',textAlign:'center',color:'var(--muted)'}}>Loading map...</div>
-              )
+                  </div>
+                ))}
+              </div>
             ) : error ? (
               <div style={{padding:'1rem'}}>
-                <div className="alert" style={{marginBottom:'1rem'}}>Failed to load listings. Ensure the API server is running (PORT=3000 node server.js).</div>
+                <div className="alert" style={{marginBottom:'1rem'}}>Failed to load listings. Ensure the API server is running (PORT=3002 node server.js).</div>
                 <button className="theme-toggle" onClick={()=> setReloadKey(k=>k+1)}>Retry</button>
               </div>
-            ) : viewMode === 'map' ? (
-              <MapView 
-                listings={filtered} 
-                onListingClick={setSelected}
-                selectedListing={selected}
-              />
             ) : (
               <div className="grid">
                 {pageItems.map(item => (
